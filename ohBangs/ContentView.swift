@@ -1,24 +1,14 @@
-//
-//  ContentView.swift
-//  ohBangs
-//
-//  Created by 伟（Wade） 王 on 2026/4/27.
-//
-
 import SwiftUI
 
 struct ContentView: View {
+    @ObservedObject var islandState: IslandStateStore
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
+        IslandView(store: islandState)
+            .background(Color.clear)
     }
 }
 
 #Preview {
-    ContentView()
+    ContentView(islandState: IslandStateStore())
 }
