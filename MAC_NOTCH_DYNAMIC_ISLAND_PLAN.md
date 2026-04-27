@@ -124,3 +124,33 @@
 
 ---
 如果你愿意，我下一步可以直接按这个文档帮你把 `Phase 1` 的代码骨架搭好。
+
+## 11. 问题复盘（2026-04-27）
+### 11.1 问题现象
+- 灵动岛处于收起态时，岛下方本应透明可点击的区域仍然拦截鼠标，导致下层应用无法点击。
+- 运行中出现警告：`Warning: -[NSWindow makeKeyWindow] called on <NSPanel ...> which returned NO from -[NSWindow canBecomeKeyWindow].`
+
+### 11.2 根因分析
+- 仅在 SwiftUI 视图层使用 `contentShape` / `allowsHitTesting` 只能约束视图命中，不会改变窗口（`NSPanel`）被 WindowServer 命中的事实。
+- 当前面板尺寸按最大展开态创建，收起态下的透明区域依然属于窗口可命中范围。
+- 默认 `NSPanel` 的 key 行为与当前调用路径不匹配，导致 `canBecomeKeyWindow` 相关警告。
+
+### 11.3 解决方案（已落地）
+- 在窗口层实现“动态鼠标穿透”：
+  - 鼠标不在岛交互区域时：`panel.ignoresMouseEvents = true`
+  - 鼠标进入岛交互区域时：`panel.ignoresMouseEvents = false`
+- 增加 `IslandPanel` 子类并覆盖：
+  - `canBecomeKey = true`
+  - `canBecomeMain = false`
+- 保持 `IslandView` 动画实现不变，仅调整窗口命中策略，避免影响现有展开/收起动画效果。
+
+### 11.4 代码位置
+- `ohBangs/IslandWindowManager.swift`
+  - 新增 `IslandPanel`
+  - 新增 `updatePanelMousePassthrough()` 与鼠标事件监听
+  - 状态变化与重定位时同步刷新穿透状态
+
+### 11.5 验证结论
+- 收起态下，岛下方区域可点击下层应用。
+- 岛区域内保持原有交互（悬停/点击/右键菜单）。
+- 工程可成功构建，通过本地编译检查。

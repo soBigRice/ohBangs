@@ -1,14 +1,40 @@
 import AppKit
+import Combine
 import SwiftUI
+
+private final class IslandPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
+private final class IslandHitTestHostingView<Content: View>: NSHostingView<Content> {
+    var interactiveRectProvider: (() -> NSRect)?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let interactiveRectProvider else {
+            return super.hitTest(point)
+        }
+
+        let interactiveRect = interactiveRectProvider()
+        guard interactiveRect.contains(point) else {
+            return nil
+        }
+
+        return super.hitTest(point)
+    }
+}
 
 @MainActor
 final class IslandWindowManager {
     static let shared = IslandWindowManager()
 
-    private var panel: NSPanel?
+    private var panel: IslandPanel?
     private var screenObserver: NSObjectProtocol?
     private var deactivationObserver: NSObjectProtocol?
     private var keyMonitor: Any?
+    private var localMouseMonitor: Any?
+    private var globalMouseMonitor: Any?
+    private var stateCancellable: AnyCancellable?
     private let islandState = IslandStateStore()
     private let contentProvider: IslandContentProvider = MockIslandContentProvider()
 
@@ -21,6 +47,7 @@ final class IslandWindowManager {
         if panel == nil {
             panel = makePanel()
             registerScreenObserver()
+            observeIslandStateIfNeeded()
         }
 
         guard let panel else { return }
@@ -28,13 +55,14 @@ final class IslandWindowManager {
         reposition(panel)
         startContentProviderIfNeeded()
         installInteractionMonitorsIfNeeded()
+        updatePanelMousePassthrough()
         panel.orderFrontRegardless()
     }
 
-    private func makePanel() -> NSPanel {
+    private func makePanel() -> IslandPanel {
         let panelSize = NSSize(width: IslandLayout.panelWidth, height: IslandLayout.panelHeight)
 
-        let panel = NSPanel(
+        let panel = IslandPanel(
             contentRect: NSRect(origin: .zero, size: panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -51,11 +79,14 @@ final class IslandWindowManager {
         panel.hasShadow = false
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        panel.ignoresMouseEvents = false
+        panel.ignoresMouseEvents = true
 
-        let hosting = NSHostingView(rootView: ContentView(islandState: islandState))
+        let hosting = IslandHitTestHostingView(rootView: ContentView(islandState: islandState))
         hosting.frame = NSRect(origin: .zero, size: panelSize)
         hosting.autoresizingMask = [.width, .height]
+        hosting.interactiveRectProvider = { [weak self] in
+            self?.currentInteractiveRect(in: panelSize) ?? .zero
+        }
         panel.contentView = hosting
 
         return panel
@@ -100,12 +131,59 @@ final class IslandWindowManager {
                 return nil
             }
         }
+
+        let mouseEvents: NSEvent.EventTypeMask = [
+            .mouseMoved,
+            .leftMouseDown,
+            .leftMouseDragged,
+            .rightMouseDown,
+            .rightMouseDragged,
+            .otherMouseDown,
+            .otherMouseDragged
+        ]
+
+        if localMouseMonitor == nil {
+            localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: mouseEvents) { [weak self] event in
+                self?.updatePanelMousePassthrough()
+                return event
+            }
+        }
+
+        if globalMouseMonitor == nil {
+            globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: mouseEvents) { [weak self] event in
+                _ = event
+                self?.updatePanelMousePassthrough()
+            }
+        }
     }
 
-    private func reposition(_ panel: NSPanel) {
+    private func reposition(_ panel: IslandPanel) {
         let size = NSSize(width: IslandLayout.panelWidth, height: IslandLayout.panelHeight)
         let origin = calculateOrigin(targetSize: size, on: panel.screen ?? NSScreen.main)
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
+        updatePanelMousePassthrough()
+    }
+
+    private func observeIslandStateIfNeeded() {
+        guard stateCancellable == nil else { return }
+        stateCancellable = islandState.$displayState
+            .combineLatest(islandState.$isHovering)
+            .sink { [weak self] _, _ in
+                self?.updatePanelMousePassthrough()
+            }
+    }
+
+    private func updatePanelMousePassthrough() {
+        guard let panel else { return }
+        let screenPoint = NSEvent.mouseLocation
+        let panelPoint = panel.convertPoint(fromScreen: screenPoint)
+        let interactiveRect = currentInteractiveRect(in: panel.frame.size)
+        let shouldHandle = interactiveRect.contains(panelPoint)
+        panel.ignoresMouseEvents = !shouldHandle
+
+        if !shouldHandle, islandState.isHovering {
+            islandState.setHovering(false)
+        }
     }
 
     private func calculateOrigin(targetSize: NSSize, on screen: NSScreen?) -> NSPoint {
@@ -127,5 +205,25 @@ final class IslandWindowManager {
             return nil
         }
         return (leftArea.maxX + rightArea.minX) / 2
+    }
+
+    private func currentInteractiveRect(in panelSize: NSSize) -> NSRect {
+        let islandSize = islandSize(for: islandState.displayState)
+        let origin = NSPoint(
+            x: (panelSize.width - islandSize.width) / 2,
+            y: panelSize.height - islandSize.height
+        )
+        return NSRect(origin: origin, size: islandSize)
+    }
+
+    private func islandSize(for state: IslandStateStore.DisplayState) -> NSSize {
+        switch state {
+        case .collapsed:
+            return NSSize(width: IslandLayout.collapsedWidth, height: IslandLayout.collapsedHeight)
+        case .hint:
+            return NSSize(width: IslandLayout.hintWidth, height: IslandLayout.hintHeight)
+        case .expanded:
+            return NSSize(width: IslandLayout.expandedWidth, height: IslandLayout.expandedHeight)
+        }
     }
 }
