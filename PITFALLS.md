@@ -43,3 +43,33 @@ ViewGraph.invalidateTransform()
 - SwiftUI 嵌在 AppKit 自定义窗口里时，**只能有一个尺寸权威**。要么 SwiftUI 主导（`sizingOptions = [.preferredContentSize]`，让 window 跟着内容变），要么 AppKit 主导（hostingView 撑满，SwiftUI 不主张尺寸）。混用必崩。
 - 涉及自定义 NSPanel 形状/位置的场景，**永远选 AppKit 主导**——尺寸由你 `setFrame` 控制，hosting 只负责画。
 - 这个异常**不一定每次都触发**，依赖动画时序。Debug 跑得过不代表 Release 没事。
+
+---
+
+## 2. NSPanel + SwiftUI：透明区域热区不透传，挡住下层窗口
+
+### 现象
+Island 收回 collapsed 形状后，肉眼看不见的"曾经展开过"的大区域（≈720×192）仍然吃掉鼠标点击：下层窗口（Finder、菜单、Dock 等）在这个矩形内点不动。视觉上 island 已经缩小，但热区没跟着缩。
+
+### 根因
+panel 的 frame 是固定的最大尺寸（panelWidth × panelHeight，覆盖 expanded 形状外加 padding），SwiftUI 内层虽然用 `.contentShape(NotchShape(...))` 把命中区域限制成了当前 island 形状，但 `IslandView` 根 `ZStack` 里塞了一层 `Color.clear` 当背景：
+
+```swift
+ZStack(alignment: .top) {
+    Color.clear           // ← 这货充满 panelWidth × panelHeight
+    ZStack { ... }
+        .contentShape(NotchShape(...))  // 内层正确限制了热区
+        .onHover { ... }
+        .onTapGesture { ... }
+}
+```
+
+`Color.clear` 在 SwiftUI 默认参与 hit testing：它撑满整个 panel，于是 panel 大区域的鼠标事件全部被它吃掉，NSHostingView.hitTest 返回的是这个 Color.clear，事件不会透传给下层窗口。内层的 `.contentShape` 只决定 onHover/onTapGesture 怎么响应，**不会**让外面那张 clear 变得"透明可穿"。
+
+### 修法
+**直接删掉根 ZStack 里的 `Color.clear`**。NSPanel 已经 `isOpaque = false` + `backgroundColor = .clear`，当 SwiftUI 命中测试在 island 形状外返回 nil，NSHostingView.hitTest 也跟着返回 nil，AppKit 自动把事件透传到下层窗口。外层 `.frame(width: panelWidth, height: panelHeight, alignment: .top)` 仍然把 island 对齐到 hosting 顶部，不需要 Color.clear 来"占位"——frame 是布局尺寸，不是命中区域。
+
+### 教训
+- **看不见 ≠ 不挡事件**。SwiftUI 中 `Color.clear` 默认是 hit-testable 的，要么 `.allowsHitTesting(false)`，要么干脆别放。
+- NSPanel + NSHostingView 的事件透传链：`NSWindow → contentView(NSHostingView).hitTest → SwiftUI hit test`。任一环节返回非 nil，事件就被这个 panel 截胡，下层窗口收不到。所以"看不见的热区"问题，**必须把 SwiftUI 这一层的命中区域和视觉区域严格对齐**——`.contentShape` 只对它所在的子树生效，外层兄弟视图（如背景 Color）要单独处理。
+- 决定用"固定大 panel + SwiftUI 内层动画缩放"这种架构（理由见 Pitfall #1：尺寸权威只能有一个），就要承担一个隐形责任：**panel 内任何 hit-testable 的视图，其形状必须和当前可见 island 形状一致**，否则就会出现"看不见但挡事件"的鬼区。

@@ -5,7 +5,6 @@ struct ContentView: View {
 
     var body: some View {
         IslandView(store: islandState)
-            .background(Color.clear)
     }
 }
 

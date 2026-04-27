@@ -100,8 +100,6 @@ struct IslandView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color.clear
-
             ZStack(alignment: .top) {
                 NotchShape(topCornerRadius: topR, bottomCornerRadius: bottomR)
                     .fill(Color.black)
