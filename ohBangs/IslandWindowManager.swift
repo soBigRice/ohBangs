@@ -177,13 +177,19 @@ final class IslandWindowManager {
         guard let panel else { return }
         let screenPoint = NSEvent.mouseLocation
         let panelPoint = panel.convertPoint(fromScreen: screenPoint)
-        let interactiveRect = currentInteractiveRect(in: panel.frame.size)
-        let shouldHandle = interactiveRect.contains(panelPoint)
-        panel.ignoresMouseEvents = !shouldHandle
+        let panelSize = panel.frame.size
 
-        if !shouldHandle, islandState.isHovering {
-            islandState.setHovering(false)
+        // Hover trigger uses a slightly expanded rect for better hit feel,
+        // while click handling still uses the strict visual island rect.
+        let hoverTriggerRect = currentHoverTriggerRect(in: panelSize)
+        let shouldHover = isPointInsideInteractionArea(panelPoint, rect: hoverTriggerRect)
+        if shouldHover != islandState.isHovering {
+            islandState.setHovering(shouldHover)
         }
+
+        let interactiveRect = currentInteractiveRect(in: panelSize)
+        let shouldHandle = isPointInsideInteractionArea(panelPoint, rect: interactiveRect)
+        panel.ignoresMouseEvents = !shouldHandle
     }
 
     private func calculateOrigin(targetSize: NSSize, on screen: NSScreen?) -> NSPoint {
@@ -225,5 +231,33 @@ final class IslandWindowManager {
         case .expanded:
             return NSSize(width: IslandLayout.expandedWidth, height: IslandLayout.expandedHeight)
         }
+    }
+
+    private func currentHoverTriggerRect(in panelSize: NSSize) -> NSRect {
+        let baseRect = currentInteractiveRect(in: panelSize)
+        let expansion: NSSize
+
+        switch islandState.displayState {
+        case .collapsed:
+            expansion = NSSize(width: 18, height: 10)
+        case .hint:
+            expansion = NSSize(width: 12, height: 8)
+        case .expanded:
+            expansion = NSSize(width: 6, height: 6)
+        }
+
+        let expandedRect = baseRect.insetBy(dx: -expansion.width, dy: -expansion.height)
+        let panelBounds = NSRect(origin: .zero, size: panelSize)
+        return expandedRect.intersection(panelBounds)
+    }
+
+    private func isPointInsideInteractionArea(_ point: NSPoint, rect: NSRect) -> Bool {
+        // NSRect.contains excludes top/right edges. Add a tiny tolerance so
+        // the island remains clickable when cursor is flush with top edge.
+        let edgeTolerance: CGFloat = 1
+        return point.x >= rect.minX &&
+            point.x <= rect.maxX + edgeTolerance &&
+            point.y >= rect.minY &&
+            point.y <= rect.maxY + edgeTolerance
     }
 }

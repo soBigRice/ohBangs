@@ -53,8 +53,8 @@ enum IslandLayout {
     static let hintWidth: CGFloat = 270
     static let hintHeight: CGFloat = 50
 
-    static let expandedWidth: CGFloat = 720
-    static let expandedHeight: CGFloat = 192
+    static let expandedWidth: CGFloat = 430
+    static let expandedHeight: CGFloat = 132
 
     static let panelWidth: CGFloat = expandedWidth + 24
     static let panelHeight: CGFloat = expandedHeight + 16
@@ -126,7 +126,11 @@ struct IslandView: View {
             .frame(width: width, height: height)
             .contentShape(NotchShape(topCornerRadius: topR, bottomCornerRadius: bottomR))
             .onHover { store.setHovering($0) }
-            .onTapGesture { store.toggle() }
+            .onTapGesture {
+                if !store.isExpanded {
+                    store.expand()
+                }
+            }
             .contextMenu {
                 Button(store.animationsEnabled ? "关闭动画" : "开启动画") {
                     store.toggleAnimations()
@@ -188,53 +192,40 @@ struct IslandView: View {
     }
 
     private var expandedContent: some View {
-        HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.05, green: 0.75, blue: 0.45),
-                            Color(red: 0.02, green: 0.52, blue: 0.30)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.08), Color.white.opacity(0.03)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
                 )
-                .frame(width: 44, height: 44)
-                .overlay {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 19, weight: .semibold))
-                        .foregroundStyle(.white)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 0.9)
+            )
+            .overlay {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("首页")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.92))
+                    Spacer()
                 }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(store.currentContent.appName)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.55))
-                Text(store.currentContent.title)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
-                Text(store.currentContent.subtitle)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                .padding(.horizontal, 18)
+                .padding(.top, 22)
+                .padding(.bottom, 10)
             }
-
-            Spacer(minLength: 0)
-
-            VStack(spacing: 3) {
-                Circle()
-                    .fill(store.currentContent.isLive ? Color(red: 0.05, green: 0.75, blue: 0.45) : .orange)
-                    .frame(width: 10, height: 10)
-                Text(store.currentContent.isLive ? "实时" : "提醒")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(store.currentContent.isLive ? Color(red: 0.05, green: 0.75, blue: 0.45) : .orange)
+            .overlay {
+                Text("首页功能区域（占位）")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.72))
             }
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 18)
-        .padding(.bottom, 14)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .allowsHitTesting(false)
+            .shadow(color: .black.opacity(0.28), radius: 10, x: 0, y: 6)
+            .padding(.horizontal, 20)
+            .padding(.top, 40)
+            .padding(.bottom, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
     }
 }
 
