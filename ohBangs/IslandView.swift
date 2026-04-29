@@ -114,6 +114,7 @@ struct IslandView: View {
         case status
         case notification
         case overview
+        case settings
 
         var id: String { rawValue }
 
@@ -124,6 +125,7 @@ struct IslandView: View {
             case .status: return "状态"
             case .notification: return "通知"
             case .overview: return "概览"
+            case .settings: return "设置"
             }
         }
 
@@ -134,13 +136,13 @@ struct IslandView: View {
             case .status: return "waveform.path.ecg"
             case .notification: return "bell.badge"
             case .overview: return "square.grid.2x2"
+            case .settings: return "slider.horizontal.3"
             }
         }
     }
 
     @ObservedObject var store: IslandStateStore
     @ObservedObject var settings: AppSettingsStore
-    let openSettingsPanel: () -> Void
     @Namespace private var sectionBarNamespace
     @State private var selectedSection: ExpandedSection = .calendar
     @State private var previousSection: ExpandedSection = .calendar
@@ -223,8 +225,10 @@ struct IslandView: View {
                 }
             }
             .contextMenu {
-                Button("打开设置") {
-                    openSettingsPanel()
+                Button("切换到设置") {
+                    previousSection = selectedSection
+                    selectedSection = .settings
+                    store.expand()
                 }
                 Divider()
                 Button(store.animationsEnabled ? "关闭动画" : "开启动画") {
@@ -298,25 +302,11 @@ struct IslandView: View {
     }
 
     private var expandedContent: some View {
-        ZStack(alignment: .topTrailing) {
-            expandedMainContent
-                .padding(.horizontal, 18)
-                .padding(.top, 42)
-                .padding(.bottom, 42)
-
-            Button {
-                openSettingsPanel()
-            } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.88))
-                    .frame(width: 24, height: 24)
-                    .background(Circle().fill(Color.white.opacity(0.10)))
-            }
-            .buttonStyle(.plain)
-            .offset(x: -18, y: 6)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        expandedMainContent
+            .padding(.horizontal, 18)
+            .padding(.top, 42)
+            .padding(.bottom, 42)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.black)
     }
 
@@ -351,6 +341,8 @@ struct IslandView: View {
             notificationPanel
         case .overview:
             overviewPanel
+        case .settings:
+            embeddedSettingsPanel
         }
     }
 
@@ -508,6 +500,11 @@ struct IslandView: View {
             overviewMetric(title: "已展开", value: "\(calendarEntries.count) 天", emphasis: false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var embeddedSettingsPanel: some View {
+        SettingsPanelView(settings: settings, mode: .embedded)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func detailPanel(
@@ -1296,7 +1293,7 @@ private struct IslandShortcutButtonStyle: ButtonStyle {
         let s = IslandStateStore()
         s.collapse()
         return s
-    }(), settings: AppSettingsStore(), openSettingsPanel: {})
+    }(), settings: AppSettingsStore())
     .padding(40)
     .background(
         LinearGradient(
@@ -1313,7 +1310,7 @@ private struct IslandShortcutButtonStyle: ButtonStyle {
         let s = IslandStateStore()
         s.expand()
         return s
-    }(), settings: AppSettingsStore(), openSettingsPanel: {})
+    }(), settings: AppSettingsStore())
     .padding(40)
     .background(
         LinearGradient(

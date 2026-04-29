@@ -108,10 +108,7 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
         let hosting = IslandHitTestHostingView(
             rootView: ContentView(
                 islandState: islandState,
-                settings: settingsStore,
-                openSettingsPanel: { [weak self] in
-                    self?.showSettingsPanel()
-                }
+                settings: settingsStore
             )
         )
         hosting.frame = NSRect(origin: .zero, size: panelSize)
