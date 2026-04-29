@@ -7,6 +7,11 @@ private final class IslandPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+private final class SettingsPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 private final class IslandHitTestHostingView<Content: View>: NSHostingView<Content> {
     var interactiveRectProvider: (() -> NSRect)?
 
@@ -25,29 +30,35 @@ private final class IslandHitTestHostingView<Content: View>: NSHostingView<Conte
 }
 
 @MainActor
-final class IslandWindowManager {
+final class IslandWindowManager: NSObject, NSWindowDelegate {
     static let shared = IslandWindowManager()
 
     private var panel: IslandPanel?
+    private var settingsPanel: SettingsPanel?
     private var screenObserver: NSObjectProtocol?
     private var deactivationObserver: NSObjectProtocol?
     private var keyMonitor: Any?
     private var localMouseMonitor: Any?
     private var globalMouseMonitor: Any?
+    private var testNotificationObserver: NSObjectProtocol?
     private var stateCancellable: AnyCancellable?
+    private var settingsCancellable: AnyCancellable?
     private let islandState = IslandStateStore()
-    private let contentProvider: IslandContentProvider = MockIslandContentProvider()
+    private let settingsStore = AppSettingsStore()
+    private let contentProvider: IslandContentProvider = SystemCalendarContentProvider()
+    private let systemNotificationBridge = SystemNotificationBridge()
 
     private let manualXOffset: CGFloat = 0
     private let manualYOffset: CGFloat = 0
 
-    private init() {}
+    private override init() {}
 
     func start() {
         if panel == nil {
             panel = makePanel()
             registerScreenObserver()
             observeIslandStateIfNeeded()
+            startSystemNotificationBridge()
         }
 
         guard let panel else { return }
@@ -57,6 +68,19 @@ final class IslandWindowManager {
         installInteractionMonitorsIfNeeded()
         updatePanelMousePassthrough()
         panel.orderFrontRegardless()
+    }
+
+    func showSettingsPanel() {
+        if settingsPanel == nil {
+            settingsPanel = makeSettingsPanel()
+        }
+
+        guard let settingsPanel else { return }
+
+        islandState.setSettingsPanelPresented(true)
+        repositionSettingsPanel(settingsPanel)
+        settingsPanel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func makePanel() -> IslandPanel {
@@ -81,13 +105,46 @@ final class IslandWindowManager {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.ignoresMouseEvents = true
 
-        let hosting = IslandHitTestHostingView(rootView: ContentView(islandState: islandState))
+        let hosting = IslandHitTestHostingView(
+            rootView: ContentView(
+                islandState: islandState,
+                settings: settingsStore,
+                openSettingsPanel: { [weak self] in
+                    self?.showSettingsPanel()
+                }
+            )
+        )
         hosting.frame = NSRect(origin: .zero, size: panelSize)
         hosting.autoresizingMask = [.width, .height]
         hosting.interactiveRectProvider = { [weak self] in
             self?.currentInteractiveRect(in: panelSize) ?? .zero
         }
         panel.contentView = hosting
+
+        return panel
+    }
+
+    private func makeSettingsPanel() -> SettingsPanel {
+        let panel = SettingsPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 220),
+            styleMask: [.titled, .closable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+
+        panel.title = "设置"
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.hidesOnDeactivate = false
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.isReleasedWhenClosed = false
+        panel.delegate = self
+        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.standardWindowButton(.zoomButton)?.isHidden = true
+        panel.contentView = NSHostingView(rootView: SettingsPanelView(settings: settingsStore))
 
         return panel
     }
@@ -101,6 +158,24 @@ final class IslandWindowManager {
             Task { @MainActor [weak self] in
                 guard let self, let panel = self.panel else { return }
                 self.reposition(panel)
+            }
+        }
+    }
+
+    private func startSystemNotificationBridge() {
+        systemNotificationBridge.onNotification = { [weak self] title, subtitle in
+            guard let self, self.settingsStore.notificationEnabled else { return }
+            self.islandState.presentNotification(title: title, subtitle: subtitle)
+        }
+        systemNotificationBridge.start()
+
+        testNotificationObserver = NotificationCenter.default.addObserver(
+            forName: SystemNotificationBridge.triggerTestNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.systemNotificationBridge.sendTestNotification()
             }
         }
     }
@@ -164,11 +239,31 @@ final class IslandWindowManager {
         updatePanelMousePassthrough()
     }
 
+    private func repositionSettingsPanel(_ panel: NSPanel) {
+        let size = panel.frame.size
+        let islandOrigin = calculateOrigin(
+            targetSize: NSSize(width: IslandLayout.panelWidth, height: IslandLayout.panelHeight),
+            on: panel.screen ?? NSScreen.main
+        )
+        let origin = NSPoint(
+            x: islandOrigin.x + (IslandLayout.panelWidth - size.width) / 2,
+            y: islandOrigin.y - size.height - 12
+        )
+        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+    }
+
     private func observeIslandStateIfNeeded() {
         guard stateCancellable == nil else { return }
         stateCancellable = islandState.$displayState
             .combineLatest(islandState.$isHovering)
             .sink { [weak self] _, _ in
+                self?.updatePanelMousePassthrough()
+            }
+
+        settingsCancellable = settingsStore.$previewDuration
+            .combineLatest(settingsStore.$expandWidth)
+            .sink { [weak self] previewDuration, _ in
+                self?.islandState.notificationPreviewDuration = .seconds(previewDuration)
                 self?.updatePanelMousePassthrough()
             }
     }
@@ -219,7 +314,15 @@ final class IslandWindowManager {
             x: (panelSize.width - islandSize.width) / 2,
             y: panelSize.height - islandSize.height
         )
-        return NSRect(origin: origin, size: islandSize)
+        var rect = NSRect(origin: origin, size: islandSize)
+
+        if islandState.displayState == .expanded {
+            rect = rect.insetBy(dx: 0, dy: -10)
+            rect.size.width += 44
+            rect.origin.x -= 22
+        }
+
+        return rect
     }
 
     private func islandSize(for state: IslandStateStore.DisplayState) -> NSSize {
@@ -227,7 +330,7 @@ final class IslandWindowManager {
         case .collapsed:
             return NSSize(width: IslandLayout.collapsedWidth, height: IslandLayout.collapsedHeight)
         case .hint:
-            return NSSize(width: IslandLayout.hintWidth, height: IslandLayout.hintHeight)
+            return NSSize(width: settingsStore.expandWidth, height: IslandLayout.hintHeight)
         case .expanded:
             return NSSize(width: IslandLayout.expandedWidth, height: IslandLayout.expandedHeight)
         }
@@ -259,5 +362,10 @@ final class IslandWindowManager {
             point.x <= rect.maxX + edgeTolerance &&
             point.y >= rect.minY &&
             point.y <= rect.maxY + edgeTolerance
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === settingsPanel else { return }
+        islandState.setSettingsPanelPresented(false)
     }
 }
