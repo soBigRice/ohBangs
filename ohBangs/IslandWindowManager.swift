@@ -84,7 +84,7 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
     }
 
     private func makePanel() -> IslandPanel {
-        let panelSize = NSSize(width: IslandLayout.panelWidth, height: IslandLayout.panelHeight)
+        let panelSize = IslandLayout.panelSize(for: NSScreen.main)
 
         let panel = IslandPanel(
             contentRect: NSRect(origin: .zero, size: panelSize),
@@ -114,7 +114,7 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
         hosting.frame = NSRect(origin: .zero, size: panelSize)
         hosting.autoresizingMask = [.width, .height]
         hosting.interactiveRectProvider = { [weak self] in
-            self?.currentInteractiveRect(in: panelSize) ?? .zero
+            self?.currentInteractiveRect(in: panel.frame.size) ?? .zero
         }
         panel.contentView = hosting
 
@@ -122,8 +122,12 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
     }
 
     private func makeSettingsPanel() -> SettingsPanel {
+        let settingsSize = NSSize(
+            width: IslandLayout.settingsPanelIdealWidth,
+            height: IslandLayout.settingsPanelMinHeight
+        )
         let panel = SettingsPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 220),
+            contentRect: NSRect(origin: .zero, size: settingsSize),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -139,6 +143,8 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         panel.delegate = self
+        panel.minSize = NSSize(width: IslandLayout.settingsPanelMinWidth, height: IslandLayout.settingsPanelMinHeight)
+        panel.maxSize = NSSize(width: IslandLayout.settingsPanelMaxWidth, height: 520)
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
         panel.contentView = NSHostingView(rootView: SettingsPanelView(settings: settingsStore))
@@ -230,7 +236,7 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
     }
 
     private func reposition(_ panel: IslandPanel) {
-        let size = NSSize(width: IslandLayout.panelWidth, height: IslandLayout.panelHeight)
+        let size = IslandLayout.panelSize(for: panel.screen ?? NSScreen.main)
         let origin = calculateOrigin(targetSize: size, on: panel.screen ?? NSScreen.main)
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
         updatePanelMousePassthrough()
@@ -238,12 +244,13 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
 
     private func repositionSettingsPanel(_ panel: NSPanel) {
         let size = panel.frame.size
+        let islandSize = IslandLayout.panelSize(for: panel.screen ?? NSScreen.main)
         let islandOrigin = calculateOrigin(
-            targetSize: NSSize(width: IslandLayout.panelWidth, height: IslandLayout.panelHeight),
+            targetSize: islandSize,
             on: panel.screen ?? NSScreen.main
         )
         let origin = NSPoint(
-            x: islandOrigin.x + (IslandLayout.panelWidth - size.width) / 2,
+            x: islandOrigin.x + (islandSize.width - size.width) / 2,
             y: islandOrigin.y - size.height - 12
         )
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
@@ -288,6 +295,9 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
         guard let screen else { return .zero }
 
         let screenFrame = screen.frame
+        // Keep the window anchored to the physical notch center when available.
+        // Adaptive sizing must not change the anchor itself, otherwise the
+        // collapsed island appears to "drift" even when its own width is fixed.
         let notchCenter = notchCenterX(on: screen) ?? screenFrame.midX
         let topOffset: CGFloat = screen.safeAreaInsets.top > 0 ? 0 : 6
 
@@ -323,13 +333,16 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
     }
 
     private func islandSize(for state: IslandStateStore.DisplayState) -> NSSize {
+        let panelSize = panel?.frame.size ?? IslandLayout.panelSize(for: NSScreen.main)
+        let expandedSize = IslandLayout.expandedIslandSize(in: panelSize)
+
         switch state {
         case .collapsed:
             return NSSize(width: IslandLayout.collapsedWidth, height: IslandLayout.collapsedHeight)
         case .hint:
             return NSSize(width: settingsStore.expandWidth, height: IslandLayout.hintHeight)
         case .expanded:
-            return NSSize(width: IslandLayout.expandedWidth, height: IslandLayout.expandedHeight)
+            return NSSize(width: expandedSize.width, height: expandedSize.height)
         }
     }
 

@@ -96,18 +96,110 @@ private struct NotchShape: Shape, Animatable {
 enum IslandLayout {
     static let collapsedWidth: CGFloat = 185
     static let collapsedHeight: CGFloat = 32
-
-    static let hintWidth: CGFloat = 270
     static let hintHeight: CGFloat = 50
 
-    static let expandedWidth: CGFloat = 596
-    static let expandedHeight: CGFloat = 218
+    static let expandedMinWidth: CGFloat = 520
+    static let expandedIdealWidth: CGFloat = 596
+    static let expandedMaxWidth: CGFloat = 680
+    static let expandedMinHeight: CGFloat = 218
+    static let expandedMaxHeight: CGFloat = 252
 
-    static let panelWidth: CGFloat = expandedWidth + 24
-    static let panelHeight: CGFloat = expandedHeight + 16
+    static let panelHorizontalPadding: CGFloat = 12
+    static let panelVerticalPadding: CGFloat = 8
+
+    static let settingsPanelMinWidth: CGFloat = 320
+    static let settingsPanelIdealWidth: CGFloat = 360
+    static let settingsPanelMaxWidth: CGFloat = 420
+    static let settingsPanelMinHeight: CGFloat = 286
+
+    static func clamp(_ value: CGFloat, min minValue: CGFloat, max maxValue: CGFloat) -> CGFloat {
+        min(max(value, minValue), maxValue)
+    }
+
+    static func expandedWidth(for availableWidth: CGFloat) -> CGFloat {
+        clamp(min(availableWidth, expandedIdealWidth), min: expandedMinWidth, max: expandedIdealWidth)
+    }
+
+    static func expandedHeight(for expandedWidth: CGFloat) -> CGFloat {
+        clamp(expandedWidth * 0.37, min: expandedMinHeight, max: expandedMaxHeight)
+    }
+
+    static func panelSize(for screen: NSScreen?) -> NSSize {
+        let availableScreenWidth = max((screen?.visibleFrame.width ?? 1440) - 64, expandedMinWidth)
+        let expandedWidth = expandedWidth(for: availableScreenWidth)
+        let expandedHeight = expandedHeight(for: expandedWidth)
+
+        return NSSize(
+            width: expandedWidth + panelHorizontalPadding * 2,
+            height: expandedHeight + panelVerticalPadding * 2
+        )
+    }
+
+    static func expandedIslandSize(in panelSize: CGSize) -> CGSize {
+        CGSize(
+            width: max(panelSize.width - panelHorizontalPadding * 2, collapsedWidth),
+            height: max(panelSize.height - panelVerticalPadding * 2, expandedMinHeight)
+        )
+    }
+}
+
+enum IslandSpacing {
+    static let xxSmall: CGFloat = 2
+    static let xSmall: CGFloat = 4
+    static let small: CGFloat = 6
+    static let medium: CGFloat = 8
+    static let large: CGFloat = 12
+    static let xLarge: CGFloat = 14
+    static let xxLarge: CGFloat = 18
+}
+
+enum IslandTypography {
+    static let caption: CGFloat = 10
+    static let body: CGFloat = 12
+    static let eyebrow: CGFloat = 11
+    static let title: CGFloat = 18
+    static let metric: CGFloat = 24
 }
 
 struct IslandView: View {
+    private struct StatusMetrics {
+        let scale: CGFloat
+        let cardSpacing: CGFloat
+        let horizontalInset: CGFloat
+        let verticalInset: CGFloat
+        let leftWidth: CGFloat
+        let rightWidth: CGFloat
+        let metricWidth: CGFloat
+        let rightCardHeight: CGFloat
+        let metricCardHeight: CGFloat
+        let sectionHeaderHeight: CGFloat
+    }
+
+    private struct CalendarMetrics {
+        let scale: CGFloat
+        let summaryWidth: CGFloat
+        let monthWidth: CGFloat
+        let badgeSize: CGFloat
+        let pillHeight: CGFloat
+        let navButtonSize: CGFloat
+        let featuredCardMinHeight: CGFloat
+        let agendaCardMinHeight: CGFloat
+        let calendarCellSize: CGFloat
+        let dotSize: CGFloat
+        let badgeHeight: CGFloat
+    }
+
+    private struct ExpandedLayoutMetrics {
+        let horizontalPadding: CGFloat
+        let topPadding: CGFloat
+        let bottomPadding: CGFloat
+        let sectionSpacing: CGFloat
+        let contentHorizontalPadding: CGFloat
+        let contentVerticalPadding: CGFloat
+        let cardPadding: CGFloat
+        let cardInnerSpacing: CGFloat
+    }
+
     fileprivate enum ExpandedSection: String, CaseIterable, Identifiable {
         case calendar
         case cloudDrive
@@ -156,7 +248,6 @@ struct IslandView: View {
     private static let sectionSwitchAnimation: Animation =
         .spring(response: 0.34, dampingFraction: 0.86, blendDuration: 0.08)
 
-    private let expandedContentAreaHeight: CGFloat = 130
     private let expandedSectionBarHeight: CGFloat = 34
 
     init(store: IslandStateStore, settings: AppSettingsStore) {
@@ -172,22 +263,6 @@ struct IslandView: View {
         self.settings = settings
         _selectedSection = State(initialValue: initialSection)
         _previousSection = State(initialValue: initialSection)
-    }
-
-    private var width: CGFloat {
-        switch store.displayState {
-        case .collapsed: return IslandLayout.collapsedWidth
-        case .hint: return settings.expandWidth
-        case .expanded: return IslandLayout.expandedWidth
-        }
-    }
-
-    private var height: CGFloat {
-        switch store.displayState {
-        case .collapsed: return IslandLayout.collapsedHeight
-        case .hint: return IslandLayout.hintHeight
-        case .expanded: return IslandLayout.expandedHeight
-        }
     }
 
     private var topR: CGFloat {
@@ -207,57 +282,66 @@ struct IslandView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
+        GeometryReader { proxy in
+            let islandSize = islandSize(in: proxy.size)
+
             ZStack(alignment: .top) {
-                NotchShape(topCornerRadius: topR, bottomCornerRadius: bottomR)
-                    .fill(Color.black)
+                ZStack(alignment: .top) {
+                    NotchShape(topCornerRadius: topR, bottomCornerRadius: bottomR)
+                        .fill(Color.black)
 
-                NotchShape(topCornerRadius: topR, bottomCornerRadius: bottomR)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                .white.opacity(0.18),
-                                .white.opacity(0.04),
-                                .white.opacity(0.12)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.6
-                    )
-                    .opacity(store.isHovering ? 1 : 0)
+                    NotchShape(topCornerRadius: topR, bottomCornerRadius: bottomR)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(0.18),
+                                    .white.opacity(0.04),
+                                    .white.opacity(0.12)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.6
+                        )
+                        .opacity(store.isHovering ? 1 : 0)
 
-                contentLayer
-                    .frame(width: width, height: height, alignment: .top)
-                    .clipShape(NotchShape(topCornerRadius: topR, bottomCornerRadius: bottomR))
-            }
-            .frame(width: width, height: height)
-            .contentShape(NotchShape(topCornerRadius: topR, bottomCornerRadius: bottomR))
-            .onHover { store.setHovering($0) }
-            .onTapGesture {
-                if !store.isExpanded {
-                    store.expand()
+                    contentLayer(in: islandSize)
+                        .frame(width: islandSize.width, height: islandSize.height, alignment: .top)
+                        .clipShape(NotchShape(topCornerRadius: topR, bottomCornerRadius: bottomR))
                 }
-            }
-            .contextMenu {
-                Button("切换到设置") {
-                    previousSection = selectedSection
-                    selectedSection = .settings
-                    store.expand()
+                .frame(width: islandSize.width, height: islandSize.height)
+                .contentShape(NotchShape(topCornerRadius: topR, bottomCornerRadius: bottomR))
+                .onHover { store.setHovering($0) }
+                .onTapGesture {
+                    if !store.isExpanded {
+                        store.expand()
+                    }
                 }
-                Divider()
-                Button(store.animationsEnabled ? "关闭动画" : "开启动画") {
-                    store.toggleAnimations()
+                .contextMenu {
+                    Button("切换到设置") {
+                        previousSection = selectedSection
+                        selectedSection = .settings
+                        store.expand()
+                    }
+                    Divider()
+                    Button(store.animationsEnabled ? "关闭动画" : "开启动画") {
+                        store.toggleAnimations()
+                    }
+                    Divider()
+                    Button("开机启动（即将支持）") {}
+                        .disabled(true)
+                    Button("显示屏选择（即将支持）") {}
+                        .disabled(true)
                 }
-                Divider()
-                Button("开机启动（即将支持）") {}
-                    .disabled(true)
-                Button("显示屏选择（即将支持）") {}
-                    .disabled(true)
+                .compositingGroup()
             }
-            .compositingGroup()
+            // The hosting panel can be wider than the collapsed island. This
+            // explicit frame preserves the historical behavior where the island
+            // stays top-centered inside the panel instead of defaulting to the
+            // GeometryReader's top-leading origin.
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
-        .frame(width: IslandLayout.panelWidth, height: IslandLayout.panelHeight, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(store.animationsEnabled ? Self.islandSpring : nil, value: store.displayState)
         .animation(store.animationsEnabled ? .easeOut(duration: 0.18) : nil, value: store.isHovering)
         .onAppear {
@@ -275,14 +359,26 @@ struct IslandView: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    private var contentLayer: some View {
+    private func islandSize(in panelSize: CGSize) -> CGSize {
+        switch store.displayState {
+        case .collapsed:
+            return CGSize(width: min(IslandLayout.collapsedWidth, panelSize.width), height: IslandLayout.collapsedHeight)
+        case .hint:
+            let maxHintWidth = max(panelSize.width - IslandLayout.panelHorizontalPadding * 2, IslandLayout.collapsedWidth)
+            return CGSize(width: min(CGFloat(settings.expandWidth), maxHintWidth), height: IslandLayout.hintHeight)
+        case .expanded:
+            return IslandLayout.expandedIslandSize(in: panelSize)
+        }
+    }
+
+    private func contentLayer(in islandSize: CGSize) -> some View {
         ZStack {
             collapsedContent
                 .opacity(store.isExpanded ? 0 : 1)
                 .animation(store.animationsEnabled ? .easeOut(duration: store.isExpanded ? 0.10 : 0.20) : nil,
                            value: store.isExpanded)
 
-            expandedContent
+            expandedContent(in: islandSize)
                 .opacity(store.isExpanded ? 1 : 0)
                 .animation(store.animationsEnabled ? .easeOut(duration: store.isExpanded ? 0.28 : 0.10)
                     .delay(store.isExpanded ? 0.08 : 0) : nil,
@@ -316,31 +412,38 @@ struct IslandView: View {
         .allowsHitTesting(false)
     }
 
-    private var expandedContent: some View {
-        expandedMainContent
-            .padding(.horizontal, 18)
-            .padding(.top, 42)
-            .padding(.bottom, 42)
+    private func expandedContent(in islandSize: CGSize) -> some View {
+        let layout = expandedLayoutMetrics(for: islandSize)
+
+        return expandedMainContent
+            .padding(.horizontal, layout.horizontalPadding)
+            .padding(.top, layout.topPadding)
+            .padding(.bottom, layout.bottomPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.black)
+            .frame(width: islandSize.width, height: islandSize.height, alignment: .top)
+            .background(Color.black)
     }
 
     private var expandedMainContent: some View {
-        VStack(spacing: 10) {
-            expandedSectionContent
-                .id(selectedSection)
-                .frame(height: expandedContentAreaHeight)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .clipped()
-                .transition(sectionContentTransition)
+        GeometryReader { proxy in
+            let layout = expandedLayoutMetrics(for: proxy.size)
+            let contentAreaHeight = max(118, proxy.size.height - expandedSectionBarHeight - layout.sectionSpacing)
 
-            expandedSectionBar
-                .frame(height: expandedSectionBarHeight)
-                .offset(y: -12)
+            VStack(spacing: layout.sectionSpacing) {
+                expandedSectionContent
+                    .id(selectedSection)
+                    .frame(minHeight: contentAreaHeight, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .clipped()
+                    .transition(sectionContentTransition)
+
+                expandedSectionBar
+                    .frame(height: expandedSectionBarHeight)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, expandedLayoutMetrics(for: IslandLayout.expandedIslandSize(in: IslandLayout.panelSize(for: NSScreen.main))).contentHorizontalPadding)
+        .padding(.vertical, expandedLayoutMetrics(for: IslandLayout.expandedIslandSize(in: IslandLayout.panelSize(for: NSScreen.main))).contentVerticalPadding)
     }
 
     @ViewBuilder
@@ -362,7 +465,7 @@ struct IslandView: View {
     }
 
     private var expandedSectionBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: IslandSpacing.medium) {
             ForEach(ExpandedSection.allCases) { section in
                 Button {
                     guard selectedSection != section else { return }
@@ -371,11 +474,11 @@ struct IslandView: View {
                         selectedSection = section
                     }
                 } label: {
-                    VStack(spacing: 4) {
+                    VStack(spacing: IslandSpacing.xSmall) {
                         Image(systemName: section.symbolName)
                             .font(.system(size: 12, weight: .bold))
                         Text(section.title)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(size: IslandTypography.caption, weight: .medium))
                     }
                     .foregroundStyle(selectedSection == section ? .white : .white.opacity(0.56))
                     .frame(maxWidth: .infinity)
@@ -412,8 +515,8 @@ struct IslandView: View {
                 .buttonStyle(IslandSegmentButtonStyle(isSelected: selectedSection == section))
             }
         }
-        .padding(.horizontal, 2)
-        .padding(.vertical, 2)
+        .padding(.horizontal, IslandSpacing.xxSmall)
+        .padding(.vertical, IslandSpacing.xxSmall)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(
@@ -431,7 +534,9 @@ struct IslandView: View {
     }
 
     private var cloudDrivePanel: some View {
-        HStack(spacing: 14) {
+        let layout = expandedLayoutMetrics(for: IslandLayout.expandedIslandSize(in: IslandLayout.panelSize(for: NSScreen.main)))
+
+        return HStack(spacing: layout.cardInnerSpacing) {
             ZStack {
                 Circle()
                     .fill(Color(red: 0.31, green: 0.58, blue: 1.0).opacity(0.18))
@@ -442,30 +547,30 @@ struct IslandView: View {
             }
             .frame(width: 58, height: 58)
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: layout.cardInnerSpacing) {
                 HStack(alignment: .center) {
                     Text("快捷入口")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: IslandTypography.eyebrow, weight: .medium))
                         .foregroundStyle(.white.opacity(0.55))
 
                     Spacer(minLength: 8)
 
                     Text("iCloud")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: IslandTypography.eyebrow, weight: .semibold))
                         .foregroundStyle(Color(red: 0.45, green: 0.72, blue: 1.0))
                 }
 
                 Text("iCloud 云盘")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .font(.system(size: IslandTypography.title, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)
 
                 Text("直接打开云盘，或者在默认位置快速新建文件夹。")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: IslandTypography.body, weight: .medium))
                     .foregroundStyle(.white.opacity(0.82))
                     .lineLimit(2)
 
-                HStack(spacing: 8) {
+                HStack(spacing: IslandSpacing.medium) {
                     shortcutButton(title: "打开云盘", symbolName: "folder") {
                         openICloudDrive()
                     }
@@ -476,33 +581,22 @@ struct IslandView: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(layout.cardPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .contentShape(Rectangle())
     }
 
     private var statusPanel: some View {
         GeometryReader { proxy in
-            let cardSpacing: CGFloat = 8
-            let horizontalInset: CGFloat = 6
-            let verticalInset: CGFloat = 4
-            let availableWidth = max(0, proxy.size.width - horizontalInset * 2)
-            let availableHeight = max(0, proxy.size.height - verticalInset * 2)
-            let leftWidth = max(134, min(146, availableWidth * 0.26))
-            let rightWidth = max(116, min(126, availableWidth * 0.218))
-            let centerWidth = max(0, availableWidth - leftWidth - rightWidth - (cardSpacing * 2))
-            let metricWidth = max(50, (centerWidth - (cardSpacing * 3)) / 4)
-            let rightCardHeight = max(42, min(50, (availableHeight - cardSpacing) / 2))
-            // 中间四张状态卡片的高度（去掉标题与间距的剩余）。
-            let metricCardHeight = max(72, min(86, availableHeight - 22))
+            let metrics = statusMetrics(for: proxy.size)
+            let availableHeight = max(0, proxy.size.height - metrics.verticalInset * 2)
 
-            HStack(alignment: .top, spacing: cardSpacing) {
-                statusPrimaryCard
-                    .frame(width: leftWidth, height: availableHeight)
+            HStack(alignment: .top, spacing: metrics.cardSpacing) {
+                statusPrimaryCard(scale: metrics.scale)
+                    .frame(width: metrics.leftWidth, height: availableHeight)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 5) {
+                VStack(alignment: .leading, spacing: IslandSpacing.xSmall * metrics.scale) {
+                    HStack(spacing: 5 * metrics.scale) {
                         Image(systemName: "waveform.path.ecg")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(
@@ -521,9 +615,9 @@ struct IslandView: View {
                             .foregroundStyle(.white.opacity(0.96))
                     }
                     .padding(.leading, 4)
-                    .frame(height: 16)
+                    .frame(height: metrics.sectionHeaderHeight)
 
-                    HStack(spacing: cardSpacing) {
+                    HStack(spacing: metrics.cardSpacing) {
                         statusMetricCard(
                             title: "CPU",
                             value: "38%",
@@ -532,9 +626,10 @@ struct IslandView: View {
                             accent: Color(red: 0.56, green: 0.42, blue: 1.0),
                             progress: 0.38,
                             chartPoints: [0.18, 0.36, 0.24, 0.58, 0.42, 0.21, 0.47, 0.32, 0.49, 0.29, 0.18],
-                            footerEmphasis: nil
+                            footerEmphasis: nil,
+                            scale: metrics.scale
                         )
-                        .frame(width: metricWidth, height: metricCardHeight)
+                        .frame(width: metrics.metricWidth, height: metrics.metricCardHeight)
 
                         statusMetricCard(
                             title: "内存",
@@ -544,9 +639,10 @@ struct IslandView: View {
                             accent: Color(red: 0.30, green: 0.56, blue: 1.0),
                             progress: 0.62,
                             chartPoints: [0.22, 0.27, 0.31, 0.25, 0.18, 0.21, 0.35, 0.29, 0.23, 0.26, 0.19],
-                            footerEmphasis: nil
+                            footerEmphasis: nil,
+                            scale: metrics.scale
                         )
-                        .frame(width: metricWidth, height: metricCardHeight)
+                        .frame(width: metrics.metricWidth, height: metrics.metricCardHeight)
 
                         statusMetricCard(
                             title: "存储空间",
@@ -556,9 +652,10 @@ struct IslandView: View {
                             accent: Color(red: 0.34, green: 0.82, blue: 0.74),
                             progress: 0.35,
                             chartPoints: [],
-                            footerEmphasis: 0.65
+                            footerEmphasis: 0.65,
+                            scale: metrics.scale
                         )
-                        .frame(width: metricWidth, height: metricCardHeight)
+                        .frame(width: metrics.metricWidth, height: metrics.metricCardHeight)
 
                         statusMetricCard(
                             title: "风扇",
@@ -568,35 +665,36 @@ struct IslandView: View {
                             accent: Color(red: 0.55, green: 0.42, blue: 1.0),
                             progress: 0.31,
                             chartPoints: [],
-                            footerEmphasis: nil
+                            footerEmphasis: nil,
+                            scale: metrics.scale
                         )
-                        .frame(width: metricWidth, height: metricCardHeight)
+                        .frame(width: metrics.metricWidth, height: metrics.metricCardHeight)
                     }
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
                 .frame(height: availableHeight, alignment: .top)
 
-                VStack(spacing: cardSpacing) {
-                    statusNetworkCard
-                        .frame(height: rightCardHeight)
+                VStack(spacing: metrics.cardSpacing) {
+                    statusNetworkCard(scale: metrics.scale)
+                        .frame(height: metrics.rightCardHeight)
 
-                    statusBatteryCard
-                        .frame(height: rightCardHeight)
+                    statusBatteryCard(scale: metrics.scale)
+                        .frame(height: metrics.rightCardHeight)
                 }
-                .frame(width: rightWidth, height: availableHeight, alignment: .top)
+                .frame(width: metrics.rightWidth, height: availableHeight, alignment: .top)
             }
-            .padding(.horizontal, horizontalInset)
-            .padding(.vertical, verticalInset)
+            .padding(.horizontal, metrics.horizontalInset)
+            .padding(.vertical, metrics.verticalInset)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .contentShape(Rectangle())
     }
 
-    private var statusPrimaryCard: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 7) {
+    private func statusPrimaryCard(scale: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 5 * scale) {
+            HStack(spacing: 7 * scale) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    RoundedRectangle(cornerRadius: 9 * scale, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [
@@ -609,62 +707,64 @@ struct IslandView: View {
                         )
 
                     Image(systemName: "laptopcomputer")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 12 * scale, weight: .bold))
                         .foregroundStyle(.white)
                 }
-                .frame(width: 26, height: 26)
+                .frame(width: 26 * scale, height: 26 * scale)
 
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: max(1, scale)) {
                     Text("MacBook Pro")
-                        .font(.system(size: 8.5, weight: .bold))
+                        .font(.system(size: 8.5 * scale, weight: .bold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
 
                     Text(statusOperatingSystem)
-                        .font(.system(size: 6.8, weight: .medium))
+                        .font(.system(size: 6.8 * scale, weight: .medium))
                         .foregroundStyle(.white.opacity(0.60))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
 
-                Spacer(minLength: 4)
+                Spacer(minLength: 4 * scale)
 
                 Circle()
                     .fill(Color(red: 0.34, green: 0.84, blue: 0.72))
-                    .frame(width: 6, height: 6)
+                    .frame(width: 6 * scale, height: 6 * scale)
             }
 
             VStack(spacing: 0) {
-                statusInfoRow(symbol: "cpu", title: statusChipName, value: "\(ProcessInfo.processInfo.processorCount) 核心")
+                statusInfoRow(symbol: "cpu", title: statusChipName, value: "\(ProcessInfo.processInfo.processorCount) 核心", scale: scale)
                 statusCardDivider
-                statusInfoRow(symbol: "memorychip", title: "内存", value: "16 GB")
+                statusInfoRow(symbol: "memorychip", title: "内存", value: "16 GB", scale: scale)
                 statusCardDivider
-                statusInfoRow(symbol: "internaldrive", title: "存储", value: "512 GB")
+                statusInfoRow(symbol: "internaldrive", title: "存储", value: "512 GB", scale: scale)
             }
 
             Spacer(minLength: 0)
 
             HStack {
                 Text("系统报告")
-                    .font(.system(size: 7.2, weight: .semibold))
+                    .font(.system(size: 7.2 * scale, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.92))
-                Spacer(minLength: 4)
+                Spacer(minLength: 4 * scale)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 7.2, weight: .bold))
+                    .font(.system(size: 7.2 * scale, weight: .bold))
                     .foregroundStyle(.white.opacity(0.72))
             }
-            .padding(.horizontal, 8)
-            .frame(height: 19)
+            .padding(.horizontal, 8 * scale)
+            .frame(height: 19 * scale)
             .background(Color.white.opacity(0.032))
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 8 * scale, style: .continuous)
                     .stroke(Color.white.opacity(0.055), lineWidth: 0.8)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 8 * scale, style: .continuous))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 8 * scale)
+        .padding(.vertical, 6 * scale)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(statusCardBackground(cornerRadius: 13))
+        .background(statusCardBackground(cornerRadius: 13 * scale))
     }
 
     private func statusMetricCard(
@@ -675,34 +775,37 @@ struct IslandView: View {
         accent: Color,
         progress: CGFloat,
         chartPoints: [CGFloat],
-        footerEmphasis: CGFloat?
+        footerEmphasis: CGFloat?,
+        scale: CGFloat
     ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: 7 * scale) {
+            HStack(spacing: 5 * scale) {
                 Circle()
                     .fill(accent)
-                    .frame(width: 6, height: 6)
+                    .frame(width: 6 * scale, height: 6 * scale)
 
                 Text(title)
-                    .font(.system(size: 7.6, weight: .bold))
+                    .font(.system(size: 7.6 * scale, weight: .bold))
                     .foregroundStyle(.white.opacity(0.86))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 5 * scale) {
                 statusRing(
                     value: value,
                     unit: title == "风扇" ? "RPM" : nil,
                     progress: progress,
-                    accent: accent
+                    accent: accent,
+                    scale: scale
                 )
-                .frame(height: 42)
+                .frame(height: 42 * scale)
                 .frame(maxWidth: .infinity)
 
                 if title == "存储空间" {
-                    VStack(alignment: .leading, spacing: 5) {
+                    VStack(alignment: .leading, spacing: 5 * scale) {
                         Text(footer)
-                            .font(.system(size: 6.2, weight: .semibold))
+                            .font(.system(size: 6.2 * scale, weight: .semibold))
                             .foregroundStyle(accent.opacity(0.70))
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
@@ -723,22 +826,21 @@ struct IslandView: View {
                                     .frame(width: storageProxy.size.width * progress)
                             }
                         }
-                        .frame(height: 6)
+                        .frame(height: 6 * scale)
                     }
                 } else if !chartPoints.isEmpty {
-                    statusWaveform(points: chartPoints, color: accent)
-                        .frame(height: 12)
+                    statusWaveform(points: chartPoints, color: accent, scale: scale)
 
                     if !detail.isEmpty {
                         Text(detail)
-                            .font(.system(size: 6.7, weight: .medium))
+                            .font(.system(size: 6.7 * scale, weight: .medium))
                             .foregroundStyle(.white.opacity(0.54))
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
                     }
                 } else if !detail.isEmpty {
                     Text(detail)
-                        .font(.system(size: 6.9, weight: .semibold))
+                        .font(.system(size: 6.9 * scale, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.50))
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
@@ -746,56 +848,57 @@ struct IslandView: View {
                     Spacer(minLength: 0)
                 }
             }
-            .padding(.horizontal, 7)
-            .padding(.top, 6)
-            .padding(.bottom, 7)
+            .padding(.horizontal, 7 * scale)
+            .padding(.top, 6 * scale)
+            .padding(.bottom, 7 * scale)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(statusCardBackground(cornerRadius: 18))
+            .background(statusCardBackground(cornerRadius: 18 * scale))
         }
         .padding(.horizontal, 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var statusNetworkCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .center, spacing: 4) {
+    private func statusNetworkCard(scale: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 6 * scale) {
+            HStack(alignment: .center, spacing: 4 * scale) {
                 Image(systemName: "wifi")
-                    .font(.system(size: 9.5, weight: .bold))
+                    .font(.system(size: 9.5 * scale, weight: .bold))
                     .foregroundStyle(Color(red: 0.55, green: 0.42, blue: 1.0))
 
                 Text("Wi-Fi")
-                    .font(.system(size: 8.5, weight: .bold))
+                    .font(.system(size: 8.5 * scale, weight: .bold))
                     .foregroundStyle(.white)
 
-                Spacer(minLength: 2)
+                Spacer(minLength: 2 * scale)
 
                 Text("5 GHz")
-                    .font(.system(size: 6.8, weight: .semibold))
+                    .font(.system(size: 6.8 * scale, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.56))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
 
-            HStack(spacing: 6) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 3) {
+            HStack(spacing: 6 * scale) {
+                VStack(alignment: .leading, spacing: 4 * scale) {
+                    HStack(spacing: 3 * scale) {
                         Image(systemName: "arrow.up")
-                            .font(.system(size: 6.5, weight: .bold))
+                            .font(.system(size: 6.5 * scale, weight: .bold))
                         Text("32.6")
-                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            .font(.system(size: 8.5 * scale, weight: .bold, design: .rounded))
                         Text("MB/s")
-                            .font(.system(size: 6, weight: .bold))
+                            .font(.system(size: 6 * scale, weight: .bold))
                     }
                     .foregroundStyle(Color(red: 0.58, green: 0.44, blue: 1.0))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
 
-                    HStack(spacing: 3) {
+                    HStack(spacing: 3 * scale) {
                         Image(systemName: "arrow.down")
-                            .font(.system(size: 6.5, weight: .bold))
+                            .font(.system(size: 6.5 * scale, weight: .bold))
                         Text("12.4")
-                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            .font(.system(size: 8.5 * scale, weight: .bold, design: .rounded))
                         Text("MB/s")
-                            .font(.system(size: 6, weight: .bold))
+                            .font(.system(size: 6 * scale, weight: .bold))
                     }
                     .foregroundStyle(Color(red: 0.34, green: 0.88, blue: 0.72))
                     .lineLimit(1)
@@ -806,37 +909,39 @@ struct IslandView: View {
                 VStack(spacing: 4) {
                     statusWaveform(
                         points: [0.34, 0.48, 0.30, 0.52, 0.40, 0.61, 0.28, 0.54, 0.36, 0.46],
-                        color: Color(red: 0.56, green: 0.42, blue: 1.0)
+                        color: Color(red: 0.56, green: 0.42, blue: 1.0),
+                        scale: scale
                     )
                     statusWaveform(
                         points: [0.12, 0.18, 0.10, 0.19, 0.15, 0.23, 0.11, 0.18, 0.12, 0.16],
-                        color: Color(red: 0.34, green: 0.88, blue: 0.72)
+                        color: Color(red: 0.34, green: 0.88, blue: 0.72),
+                        scale: scale
                     )
                 }
                 .frame(maxWidth: .infinity)
             }
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 9 * scale)
+        .padding(.vertical, 8 * scale)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(statusCardBackground(cornerRadius: 14))
+        .background(statusCardBackground(cornerRadius: 14 * scale))
     }
 
-    private var statusBatteryCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
+    private func statusBatteryCard(scale: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 6 * scale) {
+            HStack(spacing: 4 * scale) {
                 Image(systemName: "battery.100")
-                    .font(.system(size: 9.5, weight: .bold))
+                    .font(.system(size: 9.5 * scale, weight: .bold))
                     .foregroundStyle(Color(red: 0.36, green: 0.84, blue: 0.58))
 
                 Text("电池")
-                    .font(.system(size: 8.5, weight: .bold))
+                    .font(.system(size: 8.5 * scale, weight: .bold))
                     .foregroundStyle(.white)
 
-                Spacer(minLength: 2)
+                Spacer(minLength: 2 * scale)
 
                 Text("87%")
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .font(.system(size: 9 * scale, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.88))
                     .lineLimit(1)
                     .fixedSize()
@@ -861,50 +966,52 @@ struct IslandView: View {
                         .frame(width: proxy.size.width * 0.87)
                 }
             }
-            .frame(height: 8)
+            .frame(height: 8 * scale)
 
-            HStack(spacing: 4) {
+            HStack(spacing: 4 * scale) {
                 Text("剩余")
-                    .font(.system(size: 6.8, weight: .medium))
+                    .font(.system(size: 6.8 * scale, weight: .medium))
                     .foregroundStyle(.white.opacity(0.42))
                     .lineLimit(1)
                     .fixedSize()
 
-                Spacer(minLength: 2)
+                Spacer(minLength: 2 * scale)
 
                 Text("4 小时 32 分")
-                    .font(.system(size: 7.2, weight: .semibold))
+                    .font(.system(size: 7.2 * scale, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.72))
                     .lineLimit(1)
                     .fixedSize()
             }
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 9 * scale)
+        .padding(.vertical, 8 * scale)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(statusCardBackground(cornerRadius: 14))
+        .background(statusCardBackground(cornerRadius: 14 * scale))
     }
 
-    private func statusInfoRow(symbol: String, title: String, value: String) -> some View {
-        HStack(spacing: 6) {
+    private func statusInfoRow(symbol: String, title: String, value: String, scale: CGFloat) -> some View {
+        HStack(spacing: 6 * scale) {
             Image(systemName: symbol)
-                .font(.system(size: 7.6, weight: .semibold))
+                .font(.system(size: 7.6 * scale, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.72))
-                .frame(width: 11)
+                .frame(width: 11 * scale)
 
             Text(title)
-                .font(.system(size: 7, weight: .medium))
+                .font(.system(size: 7 * scale, weight: .medium))
                 .foregroundStyle(.white.opacity(0.72))
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 4 * scale)
 
             Text(value)
-                .font(.system(size: 7.4, weight: .semibold, design: .rounded))
+                .font(.system(size: 7.4 * scale, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.84))
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
-        .frame(height: 16)
+        .frame(height: 16 * scale)
     }
 
     private var statusCardDivider: some View {
@@ -913,7 +1020,7 @@ struct IslandView: View {
             .frame(height: 1)
     }
 
-    private func statusWaveform(points: [CGFloat], color: Color) -> some View {
+    private func statusWaveform(points: [CGFloat], color: Color, scale: CGFloat) -> some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let height = max(proxy.size.height, 1)
@@ -930,14 +1037,14 @@ struct IslandView: View {
 
             ZStack {
                 linePath
-                    .stroke(color.opacity(0.18), style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
-                    .blur(radius: 2.5)
+                    .stroke(color.opacity(0.18), style: StrokeStyle(lineWidth: 3.5 * scale, lineCap: .round, lineJoin: .round))
+                    .blur(radius: 2.5 * scale)
 
                 linePath
-                    .stroke(color, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+                    .stroke(color, style: StrokeStyle(lineWidth: 1.4 * scale, lineCap: .round, lineJoin: .round))
             }
         }
-        .frame(height: 11)
+        .frame(height: 11 * scale)
     }
 
     private var statusOperatingSystem: String {
@@ -953,11 +1060,12 @@ struct IslandView: View {
         value: String,
         unit: String?,
         progress: CGFloat,
-        accent: Color
+        accent: Color,
+        scale: CGFloat
     ) -> some View {
         ZStack {
             Circle()
-                .stroke(Color.white.opacity(0.08), lineWidth: 5.5)
+                .stroke(Color.white.opacity(0.08), lineWidth: 5.5 * scale)
 
             Circle()
                 .trim(from: 0.06, to: progress * 0.88 + 0.06)
@@ -966,28 +1074,29 @@ struct IslandView: View {
                         colors: [accent.opacity(0.16), accent.opacity(0.74), accent],
                         center: .center
                     ),
-                    style: StrokeStyle(lineWidth: 5.5, lineCap: .round)
+                    style: StrokeStyle(lineWidth: 5.5 * scale, lineCap: .round)
                 )
                 .rotationEffect(.degrees(136))
 
             Circle()
                 .stroke(accent.opacity(0.18), lineWidth: 1)
-                .blur(radius: 5)
+                .blur(radius: 5 * scale)
 
-            VStack(spacing: 3) {
+            VStack(spacing: 3 * scale) {
                 Text(value)
-                    .font(.system(size: unit == nil ? 12.5 : 11.5, weight: .bold, design: .rounded))
+                    .font(.system(size: (unit == nil ? 12.5 : 11.5) * scale, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
 
                 if let unit {
                     Text(unit)
-                        .font(.system(size: 6.5, weight: .bold))
+                        .font(.system(size: 6.5 * scale, weight: .bold))
                         .foregroundStyle(.white.opacity(0.50))
                 }
             }
         }
-        .frame(width: 44, height: 44)
+        .frame(width: 44 * scale, height: 44 * scale)
     }
 
     private func statusCardBackground(cornerRadius: CGFloat) -> some View {
@@ -1070,7 +1179,9 @@ struct IslandView: View {
         trailing: String,
         accent: Color
     ) -> some View {
-        HStack(spacing: 14) {
+        let layout = expandedLayoutMetrics(for: IslandLayout.expandedIslandSize(in: IslandLayout.panelSize(for: NSScreen.main)))
+
+        return HStack(spacing: layout.cardInnerSpacing) {
             ZStack {
                 Circle()
                     .fill(accent.opacity(0.18))
@@ -1081,53 +1192,52 @@ struct IslandView: View {
             }
             .frame(width: 58, height: 58)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: layout.cardInnerSpacing * 0.8) {
                 HStack(alignment: .center) {
                     Text(eyebrow)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: IslandTypography.eyebrow, weight: .medium))
                         .foregroundStyle(.white.opacity(0.55))
 
                     Spacer(minLength: 8)
 
                     Text(trailing)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: IslandTypography.eyebrow, weight: .semibold))
                         .foregroundStyle(accent)
                 }
 
                 Text(title)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .font(.system(size: IslandTypography.title, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)
 
                 Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: IslandTypography.body, weight: .medium))
                     .foregroundStyle(.white.opacity(0.65))
                     .lineLimit(1)
 
                 Text(body)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: IslandTypography.body, weight: .medium))
                     .foregroundStyle(.white.opacity(0.82))
                     .lineLimit(2)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(layout.cardPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .contentShape(Rectangle())
     }
 
     private func shortcutButton(title: String, symbolName: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: IslandSpacing.small) {
                 Image(systemName: symbolName)
                     .font(.system(size: 11, weight: .semibold))
 
                 Text(title)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: IslandTypography.eyebrow, weight: .semibold))
                     .lineLimit(1)
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, IslandSpacing.large)
             .frame(height: 30)
             .background(Color.white.opacity(0.10))
             .overlay(
@@ -1141,39 +1251,46 @@ struct IslandView: View {
     }
 
     private func overviewMetric(title: String, value: String, emphasis: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let layout = expandedLayoutMetrics(for: IslandLayout.expandedIslandSize(in: IslandLayout.panelSize(for: NSScreen.main)))
+
+        return VStack(alignment: .leading, spacing: IslandSpacing.medium) {
             Text(title.uppercased())
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: IslandTypography.caption, weight: .medium))
                 .foregroundStyle(.white.opacity(0.45))
 
             Text(value)
-                .font(.system(size: emphasis ? 24 : 18, weight: .bold, design: .rounded))
+                .font(.system(size: emphasis ? IslandTypography.metric : IslandTypography.title, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(1)
 
             Text("通过底部按钮切换容器内容")
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: IslandTypography.eyebrow, weight: .medium))
                 .foregroundStyle(.white.opacity(0.62))
                 .lineLimit(2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 14)
+        .padding(layout.cardPadding)
     }
 
     private var calendarBlock: some View {
-        HStack(alignment: .top, spacing: 0) {
-            calendarSummaryColumn
+        GeometryReader { proxy in
+            let metrics = calendarMetrics(for: proxy.size.width)
 
-            calendarDivider
+            HStack(alignment: .top, spacing: 0) {
+                calendarSummaryColumn(metrics: metrics)
+                    .frame(width: metrics.summaryWidth)
 
-            calendarMonthColumn
+                calendarDivider
 
-            calendarDivider
+                calendarMonthColumn(metrics: metrics)
+                    .frame(width: metrics.monthWidth)
 
-            calendarAgendaColumn
+                calendarDivider
+
+                calendarAgendaColumn(metrics: metrics)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             ScrollWheelCatcher { step in
                 moveCalendarSelection(forward: step > 0)
@@ -1186,10 +1303,10 @@ struct IslandView: View {
         }
     }
 
-    private var calendarSummaryColumn: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .top, spacing: 7) {
-                calendarDateBadge
+    private func calendarSummaryColumn(metrics: CalendarMetrics) -> some View {
+        VStack(alignment: .leading, spacing: IslandSpacing.small) {
+            HStack(alignment: .top, spacing: IslandSpacing.small + 1) {
+                calendarDateBadge(metrics: metrics)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(selectedCalendarDate?.formatted(.dateTime.year()) ?? "日历")
@@ -1202,21 +1319,20 @@ struct IslandView: View {
                         .foregroundStyle(.white.opacity(0.72))
                         .lineLimit(1)
 
-                    calendarWeatherPill
+                    calendarWeatherPill(metrics: metrics)
                 }
             }
 
-            calendarFeaturedEventCard
+            calendarFeaturedEventCard(metrics: metrics)
         }
-        .padding(.trailing, 7)
-        .padding(.top, 4)
-        .frame(width: 152)
+        .padding(.trailing, IslandSpacing.small + 1)
+        .padding(.top, IslandSpacing.xSmall)
         .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var calendarDateBadge: some View {
+    private func calendarDateBadge(metrics: CalendarMetrics) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: metrics.badgeSize * 0.48, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
@@ -1228,7 +1344,7 @@ struct IslandView: View {
                     )
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    RoundedRectangle(cornerRadius: metrics.badgeSize * 0.48, style: .continuous)
                         .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
                 )
 
@@ -1242,10 +1358,10 @@ struct IslandView: View {
                     .foregroundStyle(.white)
             }
         }
-        .frame(width: 42, height: 42)
+        .frame(width: metrics.badgeSize, height: metrics.badgeSize)
     }
 
-    private var calendarWeatherPill: some View {
+    private func calendarWeatherPill(metrics: CalendarMetrics) -> some View {
         let detail = selectedCalendarEntry?.detail ?? placeholderDetail
         let accent = selectedCalendarEntry?.hasEvents == true
             ? Color(red: 1.0, green: 0.64, blue: 0.28)
@@ -1265,8 +1381,8 @@ struct IslandView: View {
                 .foregroundStyle(.white.opacity(0.48))
                 .lineLimit(1)
         }
-        .padding(.horizontal, 8)
-        .frame(height: 18)
+        .padding(.horizontal, IslandSpacing.medium)
+        .frame(minHeight: metrics.pillHeight)
         .background(Color.white.opacity(0.05))
         .overlay(
             Capsule()
@@ -1275,12 +1391,12 @@ struct IslandView: View {
         .clipShape(Capsule())
     }
 
-    private var calendarFeaturedEventCard: some View {
+    private func calendarFeaturedEventCard(metrics: CalendarMetrics) -> some View {
         let detail = selectedCalendarEntry?.detail ?? placeholderDetail
         let accent = accentColor(for: selectedCalendarEntry)
 
         return VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 5) {
+            HStack(spacing: IslandSpacing.xSmall + 1) {
                 Circle()
                     .fill(accent)
                     .frame(width: 6, height: 6)
@@ -1295,7 +1411,7 @@ struct IslandView: View {
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(accent)
                     .padding(.horizontal, 6)
-                    .frame(height: 18)
+                    .frame(minHeight: metrics.badgeHeight)
                     .background(accent.opacity(0.14))
                     .clipShape(Capsule())
             }
@@ -1310,8 +1426,8 @@ struct IslandView: View {
                 .foregroundStyle(.white.opacity(0.54))
                 .lineLimit(1)
         }
-        .padding(6)
-        .frame(height: 50, alignment: .topLeading)
+        .padding(IslandSpacing.small)
+        .frame(minHeight: metrics.featuredCardMinHeight, alignment: .topLeading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -1333,10 +1449,10 @@ struct IslandView: View {
         .shadow(color: .black.opacity(0.14), radius: 8, x: 0, y: 4)
     }
 
-    private var calendarMonthColumn: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                monthNavigationButton(systemName: "chevron.left") {
+    private func calendarMonthColumn(metrics: CalendarMetrics) -> some View {
+        VStack(alignment: .leading, spacing: IslandSpacing.xSmall) {
+            HStack(spacing: IslandSpacing.xSmall) {
+                monthNavigationButton(systemName: "chevron.left", metrics: metrics) {
                     shiftPresentedMonth(by: -1)
                 }
 
@@ -1345,29 +1461,28 @@ struct IslandView: View {
                     .foregroundStyle(Color.white.opacity(0.94))
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                monthNavigationButton(systemName: "chevron.right") {
+                monthNavigationButton(systemName: "chevron.right", metrics: metrics) {
                     shiftPresentedMonth(by: 1)
                 }
             }
 
             calendarWeekHeader
 
-            calendarMonthGrid
+            calendarMonthGrid(metrics: metrics)
         }
-        .padding(.horizontal, 7)
-        .padding(.top, 4)
-        .frame(width: 188)
+        .padding(.horizontal, IslandSpacing.small + 1)
+        .padding(.top, IslandSpacing.xSmall)
         .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func monthNavigationButton(systemName: String, action: @escaping () -> Void) -> some View {
+    private func monthNavigationButton(systemName: String, metrics: CalendarMetrics, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(.white.opacity(0.92))
-                .frame(width: 18, height: 18)
+                .frame(width: metrics.navButtonSize, height: metrics.navButtonSize)
                 .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: metrics.navButtonSize / 2, style: .continuous))
         }
         .buttonStyle(IslandShortcutButtonStyle())
     }
@@ -1383,7 +1498,7 @@ struct IslandView: View {
         }
     }
 
-    private var calendarMonthGrid: some View {
+    private func calendarMonthGrid(metrics: CalendarMetrics) -> some View {
         let days = monthGridDays
 
         return VStack(spacing: 1) {
@@ -1391,14 +1506,14 @@ struct IslandView: View {
                 HStack(spacing: 0) {
                     ForEach(0..<7, id: \.self) { column in
                         let day = days[row * 7 + column]
-                        calendarMonthDayCell(day)
+                        calendarMonthDayCell(day, metrics: metrics)
                     }
                 }
             }
         }
     }
 
-    private func calendarMonthDayCell(_ date: Date) -> some View {
+    private func calendarMonthDayCell(_ date: Date, metrics: CalendarMetrics) -> some View {
         let calendar = Calendar.current
         let isInMonth = calendar.isDate(date, equalTo: presentedMonthAnchor, toGranularity: .month)
         let isToday = calendar.isDateInToday(date)
@@ -1420,10 +1535,10 @@ struct IslandView: View {
                         isSelected ? Color.white :
                             (isInMonth ? Color.white.opacity(isToday ? 0.95 : 0.78) : Color.white.opacity(0.22))
                     )
-                    .frame(width: 15, height: 15)
+                    .frame(width: metrics.calendarCellSize, height: metrics.calendarCellSize)
                     .background {
                         if isSelected {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: metrics.calendarCellSize * 0.66, style: .continuous)
                                 .fill(
                                     LinearGradient(
                                         colors: [Color(red: 0.58, green: 0.44, blue: 1.0), Color(red: 0.41, green: 0.34, blue: 0.95)],
@@ -1437,25 +1552,25 @@ struct IslandView: View {
                 if entry?.hasEvents == true {
                     Circle()
                         .fill(dotColor)
-                        .frame(width: 1.5, height: 1.5)
+                        .frame(width: metrics.dotSize, height: metrics.dotSize)
                         .offset(y: 1)
                 } else if isToday {
                     Circle()
                         .fill(Color.white.opacity(0.24))
-                        .frame(width: 1.5, height: 1.5)
+                        .frame(width: metrics.dotSize, height: metrics.dotSize)
                         .offset(y: 1)
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 15)
+            .frame(height: metrics.calendarCellSize)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(entry == nil)
     }
 
-    private var calendarAgendaColumn: some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func calendarAgendaColumn(metrics: CalendarMetrics) -> some View {
+        VStack(alignment: .leading, spacing: IslandSpacing.small) {
             HStack {
                 Text("今日安排")
                     .font(.system(size: 12, weight: .bold))
@@ -1465,41 +1580,41 @@ struct IslandView: View {
                     .font(.system(size: 9, weight: .bold, design: .rounded))
                     .foregroundStyle(Color(red: 0.70, green: 0.60, blue: 1.0))
                     .padding(.horizontal, 6)
-                    .frame(height: 18)
+                    .frame(minHeight: metrics.badgeHeight)
                     .background(Color(red: 0.42, green: 0.38, blue: 0.92).opacity(0.14))
                     .clipShape(Capsule())
 
-                Spacer(minLength: 8)
+                Spacer(minLength: IslandSpacing.medium)
 
                 Button {
                     jumpToTodayCalendarEntry()
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: IslandSpacing.small) {
                         Text("今天")
                         Image(systemName: "calendar")
                     }
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.88))
-                    .padding(.horizontal, 7)
-                    .frame(height: 20)
+                    .padding(.horizontal, IslandSpacing.small + 1)
+                    .frame(minHeight: metrics.badgeHeight + 2)
                     .background(Color.white.opacity(0.05))
                     .clipShape(Capsule())
                 }
                 .buttonStyle(IslandShortcutButtonStyle())
             }
 
-            VStack(spacing: 5) {
+            VStack(spacing: IslandSpacing.xSmall + 1) {
                 ForEach(displayedAgendaEntries) { entry in
-                    agendaEventCard(entry)
+                    agendaEventCard(entry, metrics: metrics)
                 }
             }
         }
-        .padding(.leading, 9)
-        .padding(.top, 2)
+        .padding(.leading, IslandSpacing.medium + 1)
+        .padding(.top, IslandSpacing.xxSmall)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func agendaEventCard(_ entry: IslandContent.CalendarDayEntry) -> some View {
+    private func agendaEventCard(_ entry: IslandContent.CalendarDayEntry, metrics: CalendarMetrics) -> some View {
         let detail = entry.detail
         let accent = accentColor(for: entry)
         let isSelected = entry.id == selectedCalendarEntry?.id
@@ -1509,7 +1624,7 @@ struct IslandView: View {
                 selectedCalendarEntryID = entry.id
             }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: IslandSpacing.medium) {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(accent)
                     .frame(width: 3)
@@ -1530,19 +1645,19 @@ struct IslandView: View {
                         .lineLimit(1)
                 }
 
-                Spacer(minLength: 6)
+                Spacer(minLength: IslandSpacing.small)
 
                 Text(calendarStatusBadgeText(for: entry))
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(isSelected ? accent : .white.opacity(0.62))
                     .padding(.horizontal, 6)
-                    .frame(height: 18)
+                    .frame(minHeight: metrics.badgeHeight)
                     .background((isSelected ? accent.opacity(0.16) : Color.white.opacity(0.05)))
                     .clipShape(Capsule())
             }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .frame(height: 42)
+            .padding(.horizontal, IslandSpacing.small + 1)
+            .padding(.vertical, IslandSpacing.xSmall)
+            .frame(minHeight: metrics.agendaCardMinHeight)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1586,6 +1701,77 @@ struct IslandView: View {
     private var displayedAgendaEntries: [IslandContent.CalendarDayEntry] {
         let hasRealEvents = agendaEntries.contains(where: \.hasEvents)
         return Array(agendaEntries.prefix(hasRealEvents ? 2 : 1))
+    }
+
+    private func statusMetrics(for availableSize: CGSize) -> StatusMetrics {
+        let scale = IslandLayout.clamp(
+            min(availableSize.width / IslandLayout.expandedIdealWidth, availableSize.height / 130),
+            min: 0.88,
+            max: 1.14
+        )
+        let cardSpacing = 8 * scale
+        let horizontalInset = 6 * scale
+        let verticalInset = 4 * scale
+        let availableWidth = max(0, availableSize.width - horizontalInset * 2)
+        let availableHeight = max(0, availableSize.height - verticalInset * 2)
+        let leftWidth = IslandLayout.clamp(availableWidth * 0.26, min: 134 * scale, max: 152 * scale)
+        let rightWidth = IslandLayout.clamp(availableWidth * 0.218, min: 112 * scale, max: 132 * scale)
+        let centerWidth = max(0, availableWidth - leftWidth - rightWidth - (cardSpacing * 2))
+        let metricWidth = max(50 * scale, (centerWidth - (cardSpacing * 3)) / 4)
+        let rightCardHeight = IslandLayout.clamp((availableHeight - cardSpacing) / 2, min: 42 * scale, max: 56 * scale)
+        let metricCardHeight = IslandLayout.clamp(availableHeight - (22 * scale), min: 72 * scale, max: 92 * scale)
+
+        return StatusMetrics(
+            scale: scale,
+            cardSpacing: cardSpacing,
+            horizontalInset: horizontalInset,
+            verticalInset: verticalInset,
+            leftWidth: leftWidth,
+            rightWidth: rightWidth,
+            metricWidth: metricWidth,
+            rightCardHeight: rightCardHeight,
+            metricCardHeight: metricCardHeight,
+            sectionHeaderHeight: 16 * scale
+        )
+    }
+
+    private func calendarMetrics(for availableWidth: CGFloat) -> CalendarMetrics {
+        let scale = IslandLayout.clamp(availableWidth / IslandLayout.expandedIdealWidth, min: 0.92, max: 1.08)
+        let summaryWidth = IslandLayout.clamp(availableWidth * 0.26, min: 140, max: 170)
+        let monthWidth = IslandLayout.clamp(availableWidth * 0.32, min: 176, max: 210)
+
+        return CalendarMetrics(
+            scale: scale,
+            summaryWidth: summaryWidth,
+            monthWidth: monthWidth,
+            badgeSize: IslandLayout.clamp(42 * scale, min: 38, max: 46),
+            pillHeight: IslandLayout.clamp(18 * scale, min: 16, max: 20),
+            navButtonSize: IslandLayout.clamp(18 * scale, min: 18, max: 22),
+            featuredCardMinHeight: IslandLayout.clamp(50 * scale, min: 46, max: 58),
+            agendaCardMinHeight: IslandLayout.clamp(42 * scale, min: 38, max: 50),
+            calendarCellSize: IslandLayout.clamp(monthWidth / 12, min: 14, max: 17),
+            dotSize: IslandLayout.clamp(1.5 * scale, min: 1.5, max: 2.2),
+            badgeHeight: IslandLayout.clamp(18 * scale, min: 16, max: 20)
+        )
+    }
+
+    private func expandedLayoutMetrics(for availableSize: CGSize) -> ExpandedLayoutMetrics {
+        let scale = IslandLayout.clamp(
+            min(availableSize.width / IslandLayout.expandedIdealWidth, availableSize.height / IslandLayout.expandedMinHeight),
+            min: 0.9,
+            max: 1.08
+        )
+
+        return ExpandedLayoutMetrics(
+            horizontalPadding: 18 * scale,
+            topPadding: 42 * scale,
+            bottomPadding: 30 * scale,
+            sectionSpacing: 10 * scale,
+            contentHorizontalPadding: 8 * scale,
+            contentVerticalPadding: 6 * scale,
+            cardPadding: 14 * scale,
+            cardInnerSpacing: 10 * scale
+        )
     }
 
     private var selectedCalendarEntry: IslandContent.CalendarDayEntry? {

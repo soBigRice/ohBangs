@@ -29,7 +29,7 @@ struct SettingsPanelView: View {
     }
 
     private var panelContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: IslandSpacing.xLarge) {
             Text("设置")
                 .font(.system(size: 16, weight: .semibold))
 
@@ -38,25 +38,31 @@ struct SettingsPanelView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .frame(width: 320, height: 286, alignment: .topLeading)
+        .frame(
+            minWidth: IslandLayout.settingsPanelMinWidth,
+            idealWidth: IslandLayout.settingsPanelIdealWidth,
+            maxWidth: IslandLayout.settingsPanelMaxWidth,
+            minHeight: IslandLayout.settingsPanelMinHeight,
+            alignment: .topLeading
+        )
         .onAppear(perform: refreshCalendarAuthorizationStatus)
     }
 
     private var embeddedContent: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: IslandSpacing.large) {
                 HStack(alignment: .center) {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: IslandSpacing.xSmall) {
                         Text("设置")
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .font(.system(size: IslandTypography.title, weight: .bold, design: .rounded))
                             .foregroundStyle(.white)
 
                         Text("调整灵动岛通知与展开行为")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: IslandTypography.eyebrow, weight: .medium))
                             .foregroundStyle(.white.opacity(0.48))
                     }
 
-                    Spacer(minLength: 12)
+                    Spacer(minLength: IslandSpacing.large)
 
                     Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 14, weight: .bold))
@@ -66,7 +72,7 @@ struct SettingsPanelView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                 }
 
-                HStack(spacing: 10) {
+                HStack(spacing: IslandSpacing.medium) {
                     embeddedMetricCard(
                         title: "通知",
                         value: settings.notificationEnabled ? "开启" : "关闭",
@@ -102,14 +108,14 @@ struct SettingsPanelView: View {
                 Button {
                     NotificationCenter.default.post(name: SystemNotificationBridge.triggerTestNotification, object: nil)
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: IslandSpacing.medium) {
                         Image(systemName: "bell.badge")
                         Text("发送测试通知")
                     }
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: IslandTypography.body, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 34)
+                    .frame(minHeight: 34)
                     .background(
                         LinearGradient(
                             colors: [
@@ -124,8 +130,8 @@ struct SettingsPanelView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(14)
-            .padding(.bottom, 12)
+            .padding(IslandSpacing.xLarge)
+            .padding(.bottom, IslandSpacing.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear(perform: refreshCalendarAuthorizationStatus)
@@ -150,16 +156,16 @@ struct SettingsPanelView: View {
         Toggle("通知提醒", isOn: $settings.notificationEnabled)
             .toggleStyle(.switch)
 
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: IslandSpacing.small) {
             Text("展示时长 \(Int(settings.previewDuration))s")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: IslandTypography.body, weight: .medium))
                 .foregroundStyle(mode == .panel ? Color.secondary : Color.white.opacity(0.68))
             Slider(value: $settings.previewDuration, in: 2...8, step: 1)
         }
 
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: IslandSpacing.small) {
             Text("延展宽度 \(Int(settings.expandWidth))")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: IslandTypography.body, weight: .medium))
                 .foregroundStyle(mode == .panel ? Color.secondary : Color.white.opacity(0.68))
             Slider(value: $settings.expandWidth, in: 220...320, step: 5)
         }
@@ -181,23 +187,23 @@ struct SettingsPanelView: View {
     }
 
     private var calendarPermissionRow: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: IslandSpacing.medium) {
+            HStack(spacing: IslandSpacing.medium) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("日历权限")
-                        .font(.system(size: mode == .panel ? 12 : 13, weight: .semibold))
+                        .font(.system(size: mode == .panel ? IslandTypography.body : 13, weight: .semibold))
                         .foregroundStyle(mode == .panel ? Color.primary : Color.white)
 
                     Text(calendarPermissionDescription)
-                        .font(.system(size: mode == .panel ? 11 : 11, weight: .medium))
+                        .font(.system(size: IslandTypography.eyebrow, weight: .medium))
                         .foregroundStyle(mode == .panel ? Color.secondary : .white.opacity(0.48))
                         .lineLimit(2)
                 }
 
-                Spacer(minLength: 12)
+                Spacer(minLength: IslandSpacing.large)
 
                 Text(calendarPermissionBadgeText)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: IslandTypography.eyebrow, weight: .semibold))
                     .foregroundStyle(calendarPermissionAccent)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -208,14 +214,14 @@ struct SettingsPanelView: View {
             Button {
                 openCalendarPrivacySettings()
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: IslandSpacing.small) {
                     Image(systemName: "calendar.badge.exclamationmark")
                     Text("打开系统设置中的日历权限")
                 }
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: IslandTypography.body, weight: .semibold))
                 .foregroundStyle(calendarPermissionButtonForeground)
                 .frame(maxWidth: .infinity)
-                .frame(height: 34)
+                .frame(minHeight: 34)
                 .background(calendarPermissionButtonBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -225,7 +231,7 @@ struct SettingsPanelView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, mode == .panel ? 0 : 12)
+        .padding(.horizontal, mode == .panel ? 0 : IslandSpacing.large)
         .padding(.vertical, mode == .panel ? 0 : 10)
         .background(mode == .panel ? Color.clear : Color.white.opacity(0.04))
         .overlay {
@@ -309,24 +315,24 @@ struct SettingsPanelView: View {
     }
 
     private var embeddedToggleRow: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: IslandSpacing.large) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("通知提醒")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                 Text(settings.notificationEnabled ? "收到提醒时在岛内展示预览" : "暂停在岛内展示提醒")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: IslandTypography.eyebrow, weight: .medium))
                     .foregroundStyle(.white.opacity(0.48))
                     .lineLimit(1)
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: IslandSpacing.large)
 
             Toggle("", isOn: $settings.notificationEnabled)
                 .labelsHidden()
                 .toggleStyle(.switch)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, IslandSpacing.large)
         .padding(.vertical, 10)
         .background(Color.white.opacity(0.04))
         .overlay(
@@ -343,23 +349,23 @@ struct SettingsPanelView: View {
         range: ClosedRange<Double>,
         step: Double
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: IslandSpacing.medium) {
             HStack {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
 
-                Spacer(minLength: 8)
+                Spacer(minLength: IslandSpacing.medium)
 
                 Text(valueText)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: IslandTypography.eyebrow, weight: .semibold))
                     .foregroundStyle(Color(red: 0.70, green: 0.60, blue: 1.0))
             }
 
             Slider(value: value, in: range, step: step)
                 .tint(Color(red: 0.52, green: 0.45, blue: 1.0))
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, IslandSpacing.large)
         .padding(.vertical, 10)
         .background(Color.white.opacity(0.04))
         .overlay(
@@ -385,11 +391,11 @@ struct SettingsPanelView: View {
                 .foregroundStyle(.white)
 
             Text(detail)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: IslandTypography.caption, weight: .medium))
                 .foregroundStyle(accent.opacity(0.92))
                 .lineLimit(1)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, IslandSpacing.large)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.opacity(0.04))
