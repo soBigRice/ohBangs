@@ -108,7 +108,7 @@ enum IslandLayout {
 }
 
 struct IslandView: View {
-    private enum ExpandedSection: String, CaseIterable, Identifiable {
+    fileprivate enum ExpandedSection: String, CaseIterable, Identifiable {
         case calendar
         case cloudDrive
         case status
@@ -144,8 +144,8 @@ struct IslandView: View {
     @ObservedObject var store: IslandStateStore
     @ObservedObject var settings: AppSettingsStore
     @Namespace private var sectionBarNamespace
-    @State private var selectedSection: ExpandedSection = .calendar
-    @State private var previousSection: ExpandedSection = .calendar
+    @State private var selectedSection: ExpandedSection
+    @State private var previousSection: ExpandedSection
     @State private var presentedMonthAnchor: Date = Calendar.current.startOfDay(for: Date())
     @State private var selectedCalendarEntryID: String?
     @State private var hoveredEntryID: String?
@@ -158,6 +158,21 @@ struct IslandView: View {
 
     private let expandedContentAreaHeight: CGFloat = 130
     private let expandedSectionBarHeight: CGFloat = 34
+
+    init(store: IslandStateStore, settings: AppSettingsStore) {
+        self.init(store: store, settings: settings, initialSection: .calendar)
+    }
+
+    fileprivate init(
+        store: IslandStateStore,
+        settings: AppSettingsStore,
+        initialSection: ExpandedSection = .calendar
+    ) {
+        self.store = store
+        self.settings = settings
+        _selectedSection = State(initialValue: initialSection)
+        _previousSection = State(initialValue: initialSection)
+    }
 
     private var width: CGFloat {
         switch store.displayState {
@@ -468,15 +483,554 @@ struct IslandView: View {
     }
 
     private var statusPanel: some View {
-        detailPanel(
-            symbolName: store.currentContent.isLive ? "dot.radiowaves.left.and.right" : "pause.circle",
-            eyebrow: "实时状态",
-            title: store.currentContent.title,
-            subtitle: store.currentContent.appName,
-            body: store.currentContent.subtitle,
-            trailing: store.currentContent.isLive ? "LIVE" : "静态",
-            accent: store.currentContent.isLive ? Color(red: 0.39, green: 0.62, blue: 1.0) : Color.white.opacity(0.75)
-        )
+        GeometryReader { proxy in
+            let cardSpacing: CGFloat = 8
+            let horizontalInset: CGFloat = 6
+            let verticalInset: CGFloat = 4
+            let availableWidth = max(0, proxy.size.width - horizontalInset * 2)
+            let availableHeight = max(0, proxy.size.height - verticalInset * 2)
+            let leftWidth = max(134, min(146, availableWidth * 0.26))
+            let rightWidth = max(116, min(126, availableWidth * 0.218))
+            let centerWidth = max(0, availableWidth - leftWidth - rightWidth - (cardSpacing * 2))
+            let metricWidth = max(50, (centerWidth - (cardSpacing * 3)) / 4)
+            let rightCardHeight = max(42, min(50, (availableHeight - cardSpacing) / 2))
+            // 中间四张状态卡片的高度（去掉标题与间距的剩余）。
+            let metricCardHeight = max(72, min(86, availableHeight - 22))
+
+            HStack(alignment: .top, spacing: cardSpacing) {
+                statusPrimaryCard
+                    .frame(width: leftWidth, height: availableHeight)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.72, green: 0.52, blue: 1.0),
+                                        Color(red: 0.48, green: 0.40, blue: 1.0)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+
+                        Text("系统状态")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.96))
+                    }
+                    .padding(.leading, 4)
+                    .frame(height: 16)
+
+                    HStack(spacing: cardSpacing) {
+                        statusMetricCard(
+                            title: "CPU",
+                            value: "38%",
+                            detail: "2.8 GHz",
+                            footer: "",
+                            accent: Color(red: 0.56, green: 0.42, blue: 1.0),
+                            progress: 0.38,
+                            chartPoints: [0.18, 0.36, 0.24, 0.58, 0.42, 0.21, 0.47, 0.32, 0.49, 0.29, 0.18],
+                            footerEmphasis: nil
+                        )
+                        .frame(width: metricWidth, height: metricCardHeight)
+
+                        statusMetricCard(
+                            title: "内存",
+                            value: "62%",
+                            detail: "9.9 GB / 16 GB",
+                            footer: "",
+                            accent: Color(red: 0.30, green: 0.56, blue: 1.0),
+                            progress: 0.62,
+                            chartPoints: [0.22, 0.27, 0.31, 0.25, 0.18, 0.21, 0.35, 0.29, 0.23, 0.26, 0.19],
+                            footerEmphasis: nil
+                        )
+                        .frame(width: metricWidth, height: metricCardHeight)
+
+                        statusMetricCard(
+                            title: "存储空间",
+                            value: "35%",
+                            detail: "179 GB / 512 GB",
+                            footer: "179 GB / 512 GB",
+                            accent: Color(red: 0.34, green: 0.82, blue: 0.74),
+                            progress: 0.35,
+                            chartPoints: [],
+                            footerEmphasis: 0.65
+                        )
+                        .frame(width: metricWidth, height: metricCardHeight)
+
+                        statusMetricCard(
+                            title: "风扇",
+                            value: "1200",
+                            detail: "运行平稳",
+                            footer: "",
+                            accent: Color(red: 0.55, green: 0.42, blue: 1.0),
+                            progress: 0.31,
+                            chartPoints: [],
+                            footerEmphasis: nil
+                        )
+                        .frame(width: metricWidth, height: metricCardHeight)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                .frame(height: availableHeight, alignment: .top)
+
+                VStack(spacing: cardSpacing) {
+                    statusNetworkCard
+                        .frame(height: rightCardHeight)
+
+                    statusBatteryCard
+                        .frame(height: rightCardHeight)
+                }
+                .frame(width: rightWidth, height: availableHeight, alignment: .top)
+            }
+            .padding(.horizontal, horizontalInset)
+            .padding(.vertical, verticalInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var statusPrimaryCard: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 7) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.27, green: 0.48, blue: 0.98),
+                                    Color(red: 0.40, green: 0.28, blue: 0.90)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+
+                    Image(systemName: "laptopcomputer")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 26, height: 26)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("MacBook Pro")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+
+                    Text(statusOperatingSystem)
+                        .font(.system(size: 6.8, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.60))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                Circle()
+                    .fill(Color(red: 0.34, green: 0.84, blue: 0.72))
+                    .frame(width: 6, height: 6)
+            }
+
+            VStack(spacing: 0) {
+                statusInfoRow(symbol: "cpu", title: statusChipName, value: "\(ProcessInfo.processInfo.processorCount) 核心")
+                statusCardDivider
+                statusInfoRow(symbol: "memorychip", title: "内存", value: "16 GB")
+                statusCardDivider
+                statusInfoRow(symbol: "internaldrive", title: "存储", value: "512 GB")
+            }
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Text("系统报告")
+                    .font(.system(size: 7.2, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 7.2, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.72))
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 19)
+            .background(Color.white.opacity(0.032))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.white.opacity(0.055), lineWidth: 0.8)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .background(statusCardBackground(cornerRadius: 13))
+    }
+
+    private func statusMetricCard(
+        title: String,
+        value: String,
+        detail: String,
+        footer: String,
+        accent: Color,
+        progress: CGFloat,
+        chartPoints: [CGFloat],
+        footerEmphasis: CGFloat?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(accent)
+                    .frame(width: 6, height: 6)
+
+                Text(title)
+                    .font(.system(size: 7.6, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.86))
+                    .lineLimit(1)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                statusRing(
+                    value: value,
+                    unit: title == "风扇" ? "RPM" : nil,
+                    progress: progress,
+                    accent: accent
+                )
+                .frame(height: 42)
+                .frame(maxWidth: .infinity)
+
+                if title == "存储空间" {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(footer)
+                            .font(.system(size: 6.2, weight: .semibold))
+                            .foregroundStyle(accent.opacity(0.70))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+
+                        GeometryReader { storageProxy in
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.08))
+
+                                Capsule()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [accent.opacity(0.95), accent.opacity(0.72)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: storageProxy.size.width * progress)
+                            }
+                        }
+                        .frame(height: 6)
+                    }
+                } else if !chartPoints.isEmpty {
+                    statusWaveform(points: chartPoints, color: accent)
+                        .frame(height: 12)
+
+                    if !detail.isEmpty {
+                        Text(detail)
+                            .font(.system(size: 6.7, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.54))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                } else if !detail.isEmpty {
+                    Text(detail)
+                        .font(.system(size: 6.9, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.50))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                } else {
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(.horizontal, 7)
+            .padding(.top, 6)
+            .padding(.bottom, 7)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(statusCardBackground(cornerRadius: 18))
+        }
+        .padding(.horizontal, 1)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var statusNetworkCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 4) {
+                Image(systemName: "wifi")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundStyle(Color(red: 0.55, green: 0.42, blue: 1.0))
+
+                Text("Wi-Fi")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundStyle(.white)
+
+                Spacer(minLength: 2)
+
+                Text("5 GHz")
+                    .font(.system(size: 6.8, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.56))
+                    .lineLimit(1)
+            }
+
+            HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 6.5, weight: .bold))
+                        Text("32.6")
+                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        Text("MB/s")
+                            .font(.system(size: 6, weight: .bold))
+                    }
+                    .foregroundStyle(Color(red: 0.58, green: 0.44, blue: 1.0))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 6.5, weight: .bold))
+                        Text("12.4")
+                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        Text("MB/s")
+                            .font(.system(size: 6, weight: .bold))
+                    }
+                    .foregroundStyle(Color(red: 0.34, green: 0.88, blue: 0.72))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                }
+                .layoutPriority(1)
+
+                VStack(spacing: 4) {
+                    statusWaveform(
+                        points: [0.34, 0.48, 0.30, 0.52, 0.40, 0.61, 0.28, 0.54, 0.36, 0.46],
+                        color: Color(red: 0.56, green: 0.42, blue: 1.0)
+                    )
+                    statusWaveform(
+                        points: [0.12, 0.18, 0.10, 0.19, 0.15, 0.23, 0.11, 0.18, 0.12, 0.16],
+                        color: Color(red: 0.34, green: 0.88, blue: 0.72)
+                    )
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(statusCardBackground(cornerRadius: 14))
+    }
+
+    private var statusBatteryCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: "battery.100")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundStyle(Color(red: 0.36, green: 0.84, blue: 0.58))
+
+                Text("电池")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundStyle(.white)
+
+                Spacer(minLength: 2)
+
+                Text("87%")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.88))
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.10))
+
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.34, green: 0.84, blue: 0.58),
+                                    Color(red: 0.36, green: 0.90, blue: 0.74)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: proxy.size.width * 0.87)
+                }
+            }
+            .frame(height: 8)
+
+            HStack(spacing: 4) {
+                Text("剩余")
+                    .font(.system(size: 6.8, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .lineLimit(1)
+                    .fixedSize()
+
+                Spacer(minLength: 2)
+
+                Text("4 小时 32 分")
+                    .font(.system(size: 7.2, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.72))
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(statusCardBackground(cornerRadius: 14))
+    }
+
+    private func statusInfoRow(symbol: String, title: String, value: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 7.6, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.72))
+                .frame(width: 11)
+
+            Text(title)
+                .font(.system(size: 7, weight: .medium))
+                .foregroundStyle(.white.opacity(0.72))
+                .lineLimit(1)
+
+            Spacer(minLength: 4)
+
+            Text(value)
+                .font(.system(size: 7.4, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.84))
+                .lineLimit(1)
+        }
+        .frame(height: 16)
+    }
+
+    private var statusCardDivider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.05))
+            .frame(height: 1)
+    }
+
+    private func statusWaveform(points: [CGFloat], color: Color) -> some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = max(proxy.size.height, 1)
+            let stepX = points.count > 1 ? width / CGFloat(points.count - 1) : 0
+
+            let linePath = Path { path in
+                guard let first = points.first else { return }
+                path.move(to: CGPoint(x: 0, y: height - (first * height)))
+
+                for (index, point) in points.enumerated().dropFirst() {
+                    path.addLine(to: CGPoint(x: CGFloat(index) * stepX, y: height - (point * height)))
+                }
+            }
+
+            ZStack {
+                linePath
+                    .stroke(color.opacity(0.18), style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
+                    .blur(radius: 2.5)
+
+                linePath
+                    .stroke(color, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+            }
+        }
+        .frame(height: 11)
+    }
+
+    private var statusOperatingSystem: String {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        return "macOS \(version.majorVersion).\(version.minorVersion)"
+    }
+
+    private var statusChipName: String {
+        ProcessInfo.processInfo.isiOSAppOnMac ? "Apple Silicon" : "Apple M 系列"
+    }
+
+    private func statusRing(
+        value: String,
+        unit: String?,
+        progress: CGFloat,
+        accent: Color
+    ) -> some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.08), lineWidth: 5.5)
+
+            Circle()
+                .trim(from: 0.06, to: progress * 0.88 + 0.06)
+                .stroke(
+                    AngularGradient(
+                        colors: [accent.opacity(0.16), accent.opacity(0.74), accent],
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: 5.5, lineCap: .round)
+                )
+                .rotationEffect(.degrees(136))
+
+            Circle()
+                .stroke(accent.opacity(0.18), lineWidth: 1)
+                .blur(radius: 5)
+
+            VStack(spacing: 3) {
+                Text(value)
+                    .font(.system(size: unit == nil ? 12.5 : 11.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                if let unit {
+                    Text(unit)
+                        .font(.system(size: 6.5, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.50))
+                }
+            }
+        }
+        .frame(width: 44, height: 44)
+    }
+
+    private func statusCardBackground(cornerRadius: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.055),
+                        Color.white.opacity(0.022)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.white.opacity(0.055), lineWidth: 0.8)
+            )
+            .overlay(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.10),
+                                Color.white.opacity(0.02),
+                                .clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .blur(radius: 18)
+                    .mask(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [.white, .white.opacity(0)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
+            }
     }
 
     private var notificationPanel: some View {
@@ -1310,7 +1864,7 @@ private struct IslandShortcutButtonStyle: ButtonStyle {
         let s = IslandStateStore()
         s.expand()
         return s
-    }(), settings: AppSettingsStore())
+    }(), settings: AppSettingsStore(), initialSection: .status)
     .padding(40)
     .background(
         LinearGradient(

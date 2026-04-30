@@ -1,3 +1,5 @@
+import AppKit
+import EventKit
 import SwiftUI
 
 struct SettingsPanelView: View {
@@ -8,6 +10,7 @@ struct SettingsPanelView: View {
 
     @ObservedObject var settings: AppSettingsStore
     let mode: Mode
+    @State private var calendarAuthorizationStatus = EKEventStore.authorizationStatus(for: .event)
 
     init(settings: AppSettingsStore, mode: Mode = .panel) {
         self.settings = settings
@@ -35,7 +38,8 @@ struct SettingsPanelView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .frame(width: 320, height: 220, alignment: .topLeading)
+        .frame(width: 320, height: 286, alignment: .topLeading)
+        .onAppear(perform: refreshCalendarAuthorizationStatus)
     }
 
     private var embeddedContent: some View {
@@ -93,6 +97,7 @@ struct SettingsPanelView: View {
                     range: 220...320,
                     step: 5
                 )
+                calendarPermissionRow
 
                 Button {
                     NotificationCenter.default.post(name: SystemNotificationBridge.triggerTestNotification, object: nil)
@@ -123,6 +128,7 @@ struct SettingsPanelView: View {
             .padding(.bottom, 12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear(perform: refreshCalendarAuthorizationStatus)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(
@@ -160,6 +166,7 @@ struct SettingsPanelView: View {
 
         Group {
             if mode == .panel {
+                calendarPermissionRow
                 Button("发送测试通知") {
                     NotificationCenter.default.post(name: SystemNotificationBridge.triggerTestNotification, object: nil)
                 }
@@ -171,6 +178,134 @@ struct SettingsPanelView: View {
                 .buttonStyle(.bordered)
             }
         }
+    }
+
+    private var calendarPermissionRow: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("日历权限")
+                        .font(.system(size: mode == .panel ? 12 : 13, weight: .semibold))
+                        .foregroundStyle(mode == .panel ? Color.primary : Color.white)
+
+                    Text(calendarPermissionDescription)
+                        .font(.system(size: mode == .panel ? 11 : 11, weight: .medium))
+                        .foregroundStyle(mode == .panel ? Color.secondary : .white.opacity(0.48))
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 12)
+
+                Text(calendarPermissionBadgeText)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(calendarPermissionAccent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(calendarPermissionAccent.opacity(mode == .panel ? 0.10 : 0.16))
+                    .clipShape(Capsule())
+            }
+
+            Button {
+                openCalendarPrivacySettings()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar.badge.exclamationmark")
+                    Text("打开系统设置中的日历权限")
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(calendarPermissionButtonForeground)
+                .frame(maxWidth: .infinity)
+                .frame(height: 34)
+                .background(calendarPermissionButtonBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(calendarPermissionButtonBorder, lineWidth: 0.8)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, mode == .panel ? 0 : 12)
+        .padding(.vertical, mode == .panel ? 0 : 10)
+        .background(mode == .panel ? Color.clear : Color.white.opacity(0.04))
+        .overlay {
+            if mode != .panel {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.05), lineWidth: 0.8)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var calendarPermissionBadgeText: String {
+        switch calendarAuthorizationStatus {
+        case .fullAccess, .authorized:
+            "已授权"
+        case .writeOnly:
+            "仅写入"
+        case .notDetermined:
+            "未决定"
+        case .denied:
+            "已拒绝"
+        case .restricted:
+            "受限制"
+        @unknown default:
+            "未知"
+        }
+    }
+
+    private var calendarPermissionDescription: String {
+        switch calendarAuthorizationStatus {
+        case .fullAccess, .authorized:
+            "已经允许读取系统日历，不会再重复请求。"
+        case .writeOnly:
+            "当前只有写入权限，仍然不能读取日历内容。"
+        case .notDetermined:
+            "首次访问时会请求完整权限，也可以先去系统设置手动开启。"
+        case .denied, .restricted:
+            "当前无法读取系统日历，需要去系统设置里手动授权。"
+        @unknown default:
+            "当前权限状态异常，建议前往系统设置检查。"
+        }
+    }
+
+    private var calendarPermissionAccent: Color {
+        switch calendarAuthorizationStatus {
+        case .fullAccess, .authorized:
+            .green
+        case .writeOnly:
+            .orange
+        case .notDetermined:
+            .yellow
+        case .denied, .restricted:
+            .red
+        @unknown default:
+            .gray
+        }
+    }
+
+    private var calendarPermissionButtonForeground: Color {
+        mode == .panel ? .primary : .white
+    }
+
+    private var calendarPermissionButtonBackground: Color {
+        mode == .panel ? Color.black.opacity(0.06) : Color.white.opacity(0.04)
+    }
+
+    private var calendarPermissionButtonBorder: Color {
+        mode == .panel ? Color.black.opacity(0.08) : Color.white.opacity(0.05)
+    }
+
+    private func refreshCalendarAuthorizationStatus() {
+        calendarAuthorizationStatus = EKEventStore.authorizationStatus(for: .event)
+    }
+
+    private func openCalendarPrivacySettings() {
+        refreshCalendarAuthorizationStatus()
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     private var embeddedToggleRow: some View {
