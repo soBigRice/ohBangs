@@ -45,6 +45,7 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
     private var settingsCancellable: AnyCancellable?
     private let islandState = IslandStateStore()
     private let settingsStore = AppSettingsStore()
+    private let weatherStore = WeatherStore()
     private let contentProvider: IslandContentProvider = SystemCalendarContentProvider()
     private let systemNotificationBridge = SystemNotificationBridge()
 
@@ -65,6 +66,7 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
 
         reposition(panel)
         startContentProviderIfNeeded()
+        weatherStore.start()
         installInteractionMonitorsIfNeeded()
         updatePanelMousePassthrough()
         panel.orderFrontRegardless()
@@ -108,7 +110,8 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
         let hosting = IslandHitTestHostingView(
             rootView: ContentView(
                 islandState: islandState,
-                settings: settingsStore
+                settings: settingsStore,
+                weatherStore: weatherStore
             )
         )
         hosting.frame = NSRect(origin: .zero, size: panelSize)

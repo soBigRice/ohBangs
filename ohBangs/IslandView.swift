@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CoreLocation
 
 private struct ScrollWheelCatcher: NSViewRepresentable {
     let onStep: (Int) -> Void
@@ -200,9 +201,35 @@ struct IslandView: View {
         let cardInnerSpacing: CGFloat
     }
 
+    private struct WeatherPanelMetrics {
+        let scale: CGFloat
+        let spacing: CGFloat
+        let cardHeight: CGFloat
+        let currentMinWidth: CGFloat
+        let currentIdealWidth: CGFloat
+        let hourlyMinWidth: CGFloat
+        let hourlyIdealWidth: CGFloat
+        let dailyMinWidth: CGFloat
+        let dailyIdealWidth: CGFloat
+        let iconOrbSize: CGFloat
+        let currentTemperatureSize: CGFloat
+        let currentConditionSize: CGFloat
+        let currentMetaSize: CGFloat
+        let supportingTextSize: CGFloat
+        let headerTextSize: CGFloat
+        let hourlyIconSize: CGFloat
+        let hourlyTimeSize: CGFloat
+        let hourlyTemperatureSize: CGFloat
+        let dayRowHeight: CGFloat
+        let dayTextSize: CGFloat
+        let dailyHeaderBottomSpacing: CGFloat
+        let cardPaddingHorizontal: CGFloat
+        let cardPaddingVertical: CGFloat
+        let cardCornerRadius: CGFloat
+    }
+
     fileprivate enum ExpandedSection: String, CaseIterable, Identifiable {
         case calendar
-        case cloudDrive
         case status
         case notification
         case overview
@@ -213,9 +240,8 @@ struct IslandView: View {
         var title: String {
             switch self {
             case .calendar: return "日历"
-            case .cloudDrive: return "网盘"
             case .status: return "状态"
-            case .notification: return "通知"
+            case .notification: return "天气"
             case .overview: return "概览"
             case .settings: return "设置"
             }
@@ -224,9 +250,8 @@ struct IslandView: View {
         var symbolName: String {
             switch self {
             case .calendar: return "calendar"
-            case .cloudDrive: return "icloud"
             case .status: return "waveform.path.ecg"
-            case .notification: return "bell.badge"
+            case .notification: return "cloud.sun"
             case .overview: return "square.grid.2x2"
             case .settings: return "slider.horizontal.3"
             }
@@ -235,6 +260,7 @@ struct IslandView: View {
 
     @ObservedObject var store: IslandStateStore
     @ObservedObject var settings: AppSettingsStore
+    @ObservedObject var weatherStore: WeatherStore
     @Namespace private var sectionBarNamespace
     @State private var selectedSection: ExpandedSection
     @State private var previousSection: ExpandedSection
@@ -250,17 +276,19 @@ struct IslandView: View {
 
     private let expandedSectionBarHeight: CGFloat = 34
 
-    init(store: IslandStateStore, settings: AppSettingsStore) {
-        self.init(store: store, settings: settings, initialSection: .calendar)
+    init(store: IslandStateStore, settings: AppSettingsStore, weatherStore: WeatherStore) {
+        self.init(store: store, settings: settings, weatherStore: weatherStore, initialSection: .calendar)
     }
 
     fileprivate init(
         store: IslandStateStore,
         settings: AppSettingsStore,
+        weatherStore: WeatherStore,
         initialSection: ExpandedSection = .calendar
     ) {
         self.store = store
         self.settings = settings
+        self.weatherStore = weatherStore
         _selectedSection = State(initialValue: initialSection)
         _previousSection = State(initialValue: initialSection)
     }
@@ -451,8 +479,6 @@ struct IslandView: View {
         switch selectedSection {
         case .calendar:
             calendarBlock
-        case .cloudDrive:
-            cloudDrivePanel
         case .status:
             statusPanel
         case .notification:
@@ -465,7 +491,7 @@ struct IslandView: View {
     }
 
     private var expandedSectionBar: some View {
-        HStack(spacing: IslandSpacing.medium) {
+        HStack(spacing: 10) {
             ForEach(ExpandedSection.allCases) { section in
                 Button {
                     guard selectedSection != section else { return }
@@ -474,116 +500,55 @@ struct IslandView: View {
                         selectedSection = section
                     }
                 } label: {
-                    VStack(spacing: IslandSpacing.xSmall) {
+                    ZStack {
+                        if selectedSection == section {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(red: 0.33, green: 0.28, blue: 0.72).opacity(0.92),
+                                            Color(red: 0.44, green: 0.33, blue: 0.98).opacity(0.78)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
+                                )
+                                .shadow(color: Color(red: 0.40, green: 0.30, blue: 0.95).opacity(0.28), radius: 12, y: 4)
+                                .matchedGeometryEffect(id: "selectedSectionBackground", in: sectionBarNamespace)
+                        }
+
                         Image(systemName: section.symbolName)
-                            .font(.system(size: 12, weight: .bold))
-                        Text(section.title)
-                            .font(.system(size: IslandTypography.caption, weight: .medium))
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(selectedSection == section ? .white : .white.opacity(0.55))
                     }
-                    .foregroundStyle(selectedSection == section ? .white : .white.opacity(0.56))
                     .frame(maxWidth: .infinity)
                     .frame(height: expandedSectionBarHeight)
-                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .background {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color.white.opacity(0.015))
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(Color.white.opacity(0.05), lineWidth: 0.8)
-
-                            if selectedSection == section {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [
-                                                Color.white.opacity(0.14),
-                                                Color(red: 0.42, green: 0.38, blue: 0.92).opacity(0.24)
-                                            ],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .stroke(Color.white.opacity(0.18), lineWidth: 0.9)
-                                    )
-                                    .matchedGeometryEffect(id: "selectedSectionBackground", in: sectionBarNamespace)
-                            }
-                        }
-                    }
+                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(IslandSegmentButtonStyle(isSelected: selectedSection == section))
+                .help(section.title)
             }
         }
-        .padding(.horizontal, IslandSpacing.xxSmall)
-        .padding(.vertical, IslandSpacing.xxSmall)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            Capsule(style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [Color.white.opacity(0.018), Color.white.opacity(0.008)],
+                        colors: [Color.white.opacity(0.022), Color.white.opacity(0.008)],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            Capsule(style: .continuous)
                 .stroke(Color.white.opacity(0.04), lineWidth: 0.8)
         )
-    }
-
-    private var cloudDrivePanel: some View {
-        let layout = expandedLayoutMetrics(for: IslandLayout.expandedIslandSize(in: IslandLayout.panelSize(for: NSScreen.main)))
-
-        return HStack(spacing: layout.cardInnerSpacing) {
-            ZStack {
-                Circle()
-                    .fill(Color(red: 0.31, green: 0.58, blue: 1.0).opacity(0.18))
-
-                Image(systemName: "icloud.fill")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 58, height: 58)
-
-            VStack(alignment: .leading, spacing: layout.cardInnerSpacing) {
-                HStack(alignment: .center) {
-                    Text("快捷入口")
-                        .font(.system(size: IslandTypography.eyebrow, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.55))
-
-                    Spacer(minLength: 8)
-
-                    Text("iCloud")
-                        .font(.system(size: IslandTypography.eyebrow, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.45, green: 0.72, blue: 1.0))
-                }
-
-                Text("iCloud 云盘")
-                    .font(.system(size: IslandTypography.title, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-
-                Text("直接打开云盘，或者在默认位置快速新建文件夹。")
-                    .font(.system(size: IslandTypography.body, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.82))
-                    .lineLimit(2)
-
-                HStack(spacing: IslandSpacing.medium) {
-                    shortcutButton(title: "打开云盘", symbolName: "folder") {
-                        openICloudDrive()
-                    }
-
-                    shortcutButton(title: "新建文件夹", symbolName: "folder.badge.plus") {
-                        createFolderInICloudDrive()
-                    }
-                }
-            }
-        }
-        .padding(layout.cardPadding)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
     }
 
     private var statusPanel: some View {
@@ -1155,6 +1120,10 @@ struct IslandView: View {
         )
     }
 
+    private var displayedWeatherSnapshot: WeatherSnapshot {
+        weatherStore.snapshot ?? .placeholder
+    }
+
     private func normalizedHistoryPoints(_ history: [Double]) -> [CGFloat] {
         let sanitized = history.map { max($0, 0) }
         guard let maxValue = sanitized.max(), maxValue > 0 else {
@@ -1192,17 +1161,124 @@ struct IslandView: View {
     }
 
     private var notificationPanel: some View {
-        let preview = store.notificationPreview
+        return GeometryReader { proxy in
+            let layout = expandedLayoutMetrics(for: proxy.size)
+            let metrics = weatherPanelMetrics(for: proxy.size)
 
-        return detailPanel(
-            symbolName: preview?.iconSystemName ?? "bell.slash",
-            eyebrow: "通知预览",
-            title: preview?.title ?? "当前没有通知",
-            subtitle: preview == nil ? "等待系统通知进入岛内" : "来自系统桥接",
-            body: preview?.subtitle ?? "收到通知后，这里会展示标题和副标题。",
-            trailing: preview == nil ? "空闲" : "新消息",
-            accent: preview == nil ? Color.white.opacity(0.75) : Color(red: 0.96, green: 0.73, blue: 0.27)
-        )
+            Group {
+                if let weather = weatherStore.snapshot {
+                    HStack(spacing: metrics.spacing) {
+                        weatherCurrentColumn(weather, metrics: metrics)
+                            .frame(minWidth: metrics.currentMinWidth, idealWidth: metrics.currentIdealWidth, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                            .layoutPriority(4)
+
+                        weatherHourlyCard(weather, metrics: metrics)
+                            .frame(minWidth: metrics.hourlyMinWidth, idealWidth: metrics.hourlyIdealWidth, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .layoutPriority(3)
+
+                        weatherDailyCard(weather, metrics: metrics)
+                            .frame(minWidth: metrics.dailyMinWidth, idealWidth: metrics.dailyIdealWidth, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .layoutPriority(3)
+                    }
+                } else if let errorMessage = weatherStore.errorMessage {
+                    weatherUnavailablePanel(message: errorMessage, metrics: metrics)
+                } else {
+                    weatherLoadingPanel(metrics: metrics)
+                }
+            }
+            .frame(height: metrics.cardHeight, alignment: .top)
+            .padding(.horizontal, layout.cardPadding * 0.8)
+            .padding(.top, 0)
+            .padding(.bottom, 3 * metrics.scale)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    private func weatherUnavailablePanel(message: String, metrics: WeatherPanelMetrics) -> some View {
+        HStack(spacing: 14 * metrics.scale) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.09),
+                                Color.white.opacity(0.03)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                    )
+
+                Image(systemName: weatherStore.authorizationStatus == .denied || weatherStore.authorizationStatus == .restricted ? "location.slash.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: metrics.iconOrbSize * 0.34, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.78))
+            }
+            .frame(width: metrics.iconOrbSize * 0.84, height: metrics.iconOrbSize * 0.84)
+
+            VStack(alignment: .leading, spacing: 8 * metrics.scale) {
+                Text(weatherStore.authorizationStatus == .denied || weatherStore.authorizationStatus == .restricted ? "无法获取位置" : "天气暂时不可用")
+                    .font(.system(size: metrics.currentConditionSize, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                Text(weatherStore.authorizationStatus == .denied || weatherStore.authorizationStatus == .restricted
+                    ? "请在系统设置的定位服务中允许 ohBangs 访问你的位置。"
+                    : message
+                )
+                .font(.system(size: metrics.currentMetaSize, weight: .medium))
+                .foregroundStyle(.white.opacity(0.66))
+                .lineLimit(2)
+
+                Button {
+                    weatherStore.refresh()
+                } label: {
+                    Text(weatherStore.authorizationStatus == .denied || weatherStore.authorizationStatus == .restricted ? "重新检查权限" : "重试")
+                        .font(.system(size: metrics.supportingTextSize * 1.1, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12 * metrics.scale)
+                        .padding(.vertical, 6 * metrics.scale)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.10))
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, metrics.cardPaddingHorizontal)
+        .padding(.vertical, metrics.cardPaddingVertical)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(weatherCardBackground(cornerRadius: metrics.cardCornerRadius))
+    }
+
+    private func weatherLoadingPanel(metrics: WeatherPanelMetrics) -> some View {
+        HStack(spacing: 14 * metrics.scale) {
+            ProgressView()
+                .controlSize(.regular)
+                .tint(.white)
+
+            VStack(alignment: .leading, spacing: 6 * metrics.scale) {
+                Text("正在获取天气")
+                    .font(.system(size: metrics.currentConditionSize, weight: .bold))
+                    .foregroundStyle(.white)
+
+                Text("等待定位与天气数据返回")
+                    .font(.system(size: metrics.currentMetaSize, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.64))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, metrics.cardPaddingHorizontal)
+        .padding(.vertical, metrics.cardPaddingVertical)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(weatherCardBackground(cornerRadius: metrics.cardCornerRadius))
     }
 
     private var overviewPanel: some View {
@@ -1219,84 +1295,258 @@ struct IslandView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func detailPanel(
-        symbolName: String,
-        eyebrow: String,
-        title: String,
-        subtitle: String,
-        body: String,
-        trailing: String,
-        accent: Color
-    ) -> some View {
-        let layout = expandedLayoutMetrics(for: IslandLayout.expandedIslandSize(in: IslandLayout.panelSize(for: NSScreen.main)))
-
-        return HStack(spacing: layout.cardInnerSpacing) {
+    private func weatherCurrentColumn(_ weather: WeatherSnapshot, metrics: WeatherPanelMetrics) -> some View {
+        HStack(spacing: 8 * metrics.scale) {
             ZStack {
                 Circle()
-                    .fill(accent.opacity(0.18))
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(red: 0.40, green: 0.58, blue: 1.0).opacity(0.88),
+                                Color(red: 0.22, green: 0.31, blue: 0.62).opacity(0.70)
+                            ],
+                            center: UnitPoint(x: 0.38, y: 0.34),
+                            startRadius: 4,
+                            endRadius: 54
+                        )
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(0.20), lineWidth: 1)
+                    )
 
-                Image(systemName: symbolName)
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(.white)
+                Image(systemName: "cloud.sun.fill")
+                    .font(.system(size: metrics.iconOrbSize * 0.44, weight: .medium))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color(red: 1.0, green: 0.86, blue: 0.44), .white, Color(red: 0.76, green: 0.86, blue: 1.0)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
             }
-            .frame(width: 58, height: 58)
+            .frame(width: metrics.iconOrbSize * 0.92, height: metrics.iconOrbSize * 0.92)
+            .shadow(color: Color(red: 0.31, green: 0.44, blue: 0.98).opacity(0.34), radius: 18 * metrics.scale, y: 8 * metrics.scale)
 
-            VStack(alignment: .leading, spacing: layout.cardInnerSpacing * 0.8) {
-                HStack(alignment: .center) {
-                    Text(eyebrow)
-                        .font(.system(size: IslandTypography.eyebrow, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.55))
+            VStack(alignment: .leading, spacing: 1.5 * metrics.scale) {
+                Text("\(weather.temperature)°")
+                    .font(.system(size: metrics.currentTemperatureSize, weight: .light, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
 
-                    Spacer(minLength: 8)
+                Text(weather.condition)
+                    .font(.system(size: metrics.currentConditionSize, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
 
-                    Text(trailing)
-                        .font(.system(size: IslandTypography.eyebrow, weight: .semibold))
-                        .foregroundStyle(accent)
+                Label(weather.city, systemImage: "location.fill")
+                    .font(.system(size: metrics.currentMetaSize, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.76))
+                    .lineLimit(1)
+
+                VStack(alignment: .leading, spacing: 1.5 * metrics.scale) {
+                    HStack(spacing: 0) {
+                        weatherMetricText("体感 \(weather.feelsLike)°", metrics: metrics)
+                        weatherMetricText(" · 湿度 \(weather.humidity)%", metrics: metrics)
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                    Text(weather.airQuality)
+                        .font(.system(size: metrics.supportingTextSize, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.40, green: 0.88, blue: 0.48))
+                        .lineLimit(1)
                 }
-
-                Text(title)
-                    .font(.system(size: IslandTypography.title, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-
-                Text(subtitle)
-                    .font(.system(size: IslandTypography.body, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.65))
-                    .lineLimit(1)
-
-                Text(body)
-                    .font(.system(size: IslandTypography.body, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.82))
-                    .lineLimit(2)
+                .padding(.top, 4 * metrics.scale)
             }
+            .frame(minWidth: 96 * metrics.scale, maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(layout.cardPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
     }
 
-    private func shortcutButton(title: String, symbolName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: IslandSpacing.small) {
-                Image(systemName: symbolName)
-                    .font(.system(size: 11, weight: .semibold))
+    private func weatherHourlyCard(_ weather: WeatherSnapshot, metrics: WeatherPanelMetrics) -> some View {
+        let currentIndex = weather.hourly.firstIndex(where: \.isCurrent) ?? 0
 
-                Text(title)
-                    .font(.system(size: IslandTypography.eyebrow, weight: .semibold))
-                    .lineLimit(1)
+        return VStack(alignment: .leading, spacing: 12 * metrics.scale) {
+            HStack(spacing: 0) {
+                ForEach(weather.hourly) { hour in
+                    VStack(spacing: 10 * metrics.scale) {
+                        Text(hour.time)
+                            .font(.system(size: metrics.hourlyTimeSize, weight: hour.isCurrent ? .bold : .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(hour.isCurrent ? Color(red: 0.53, green: 0.44, blue: 1.0) : .white.opacity(0.62))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+
+                        Image(systemName: hour.symbolName)
+                            .font(.system(size: metrics.hourlyIconSize, weight: .medium))
+                            .foregroundStyle(weatherSymbolGradient(for: hour.symbolName))
+
+                        Text("\(hour.temperature)°")
+                            .font(.system(size: metrics.hourlyTemperatureSize, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, IslandSpacing.large)
-            .frame(height: 30)
-            .background(Color.white.opacity(0.10))
-            .overlay(
-                Capsule()
-                    .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
-            )
-            .clipShape(Capsule())
-            .contentShape(Capsule())
+            .layoutPriority(1)
+
+            Spacer(minLength: 0)
+
+            GeometryReader { geometry in
+                let indicatorWidth = 30 * metrics.scale
+                let columnWidth = geometry.size.width / CGFloat(max(weather.hourly.count, 1))
+                let xOffset = (columnWidth * CGFloat(currentIndex)) + ((columnWidth - indicatorWidth) / 2)
+
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(Color(red: 0.50, green: 0.40, blue: 1.0))
+                    .frame(width: indicatorWidth, height: 4 * metrics.scale)
+                    .offset(x: xOffset)
+            }
+            .frame(height: 4 * metrics.scale)
         }
-        .buttonStyle(IslandShortcutButtonStyle())
+        .padding(.horizontal, metrics.cardPaddingHorizontal)
+        .padding(.top, metrics.cardPaddingVertical)
+        .padding(.bottom, metrics.cardPaddingVertical * 0.72)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(weatherCardBackground(cornerRadius: metrics.cardCornerRadius))
+    }
+
+    private func weatherDailyCard(_ weather: WeatherSnapshot, metrics: WeatherPanelMetrics) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                HStack(spacing: 6 * metrics.scale) {
+                    Label("\(weather.precipitationChance)%", systemImage: "drop")
+                        .font(.system(size: metrics.headerTextSize, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+
+                    Rectangle()
+                        .fill(Color.white.opacity(0.12))
+                        .frame(width: 1, height: 12 * metrics.scale)
+
+                    Label("\(weather.windSpeed) km/h", systemImage: "wind")
+                        .font(.system(size: metrics.headerTextSize, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
+
+                Spacer(minLength: 6 * metrics.scale)
+
+                HStack(spacing: 6 * metrics.scale) {
+                    Text("天气")
+                        .font(.system(size: metrics.currentMetaSize, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.82))
+                    Image(systemName: "cloud")
+                        .font(.system(size: metrics.currentMetaSize * 1.18, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.70))
+                }
+            }
+            .padding(.bottom, metrics.dailyHeaderBottomSpacing)
+
+            ForEach(Array(weather.daily.enumerated()), id: \.element.id) { index, day in
+                HStack {
+                    Text(day.weekday)
+                        .font(.system(size: metrics.dayTextSize, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.78))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .frame(width: 34 * metrics.scale, alignment: .leading)
+
+                    Spacer(minLength: 5 * metrics.scale)
+
+                    Image(systemName: day.symbolName)
+                        .font(.system(size: metrics.hourlyIconSize * 0.9, weight: .medium))
+                        .foregroundStyle(weatherSymbolGradient(for: day.symbolName))
+
+                    Spacer(minLength: 8 * metrics.scale)
+
+                    Text("\(day.high)° / \(day.low)°")
+                        .font(.system(size: metrics.dayTextSize, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.88))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                }
+                .frame(height: metrics.dayRowHeight)
+
+                if index < weather.daily.count - 1 {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.06))
+                        .frame(height: 1)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, metrics.cardPaddingHorizontal)
+        .padding(.vertical, metrics.cardPaddingVertical * 0.86)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(weatherCardBackground(cornerRadius: metrics.cardCornerRadius))
+    }
+
+    private func weatherMetricText(_ text: String, metrics: WeatherPanelMetrics) -> some View {
+        Text(text)
+            .font(.system(size: metrics.supportingTextSize, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.54))
+    }
+
+    private func weatherCardBackground(cornerRadius: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.075),
+                        Color.white.opacity(0.035)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.white.opacity(0.02))
+            )
+    }
+
+    private func weatherSymbolGradient(for symbolName: String) -> LinearGradient {
+        if symbolName.contains("moon") {
+            return LinearGradient(
+                colors: [Color(red: 0.74, green: 0.81, blue: 1.0), Color(red: 0.46, green: 0.56, blue: 1.0)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+
+        if symbolName.contains("rain") {
+            return LinearGradient(
+                colors: [Color.white, Color(red: 0.54, green: 0.75, blue: 1.0)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+
+        if symbolName.contains("sun") {
+            return LinearGradient(
+                colors: [Color(red: 1.0, green: 0.84, blue: 0.36), Color(red: 1.0, green: 0.92, blue: 0.62)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+
+        return LinearGradient(
+            colors: [Color.white, Color(red: 0.82, green: 0.89, blue: 1.0)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 
     private func overviewMetric(title: String, value: String, emphasis: Bool) -> some View {
@@ -1810,6 +2060,65 @@ struct IslandView: View {
         )
     }
 
+    private func weatherPanelMetrics(for availableSize: CGSize) -> WeatherPanelMetrics {
+        let verticalBudget = max(availableSize.height - 10, 0)
+        let scale = IslandLayout.clamp(
+            min(availableSize.width / 640, availableSize.height / 170),
+            min: 0.58,
+            max: 1.0
+        )
+        let spacing = 10 * scale
+        let cardHeight = IslandLayout.clamp(verticalBudget * 0.84, min: 118 * scale, max: 164 * scale)
+        let currentMinWidth = IslandLayout.clamp(146 * scale, min: 130, max: 164)
+        let currentIdealWidth = IslandLayout.clamp(204 * scale, min: 182, max: 220)
+        let hourlyMinWidth = IslandLayout.clamp(258 * scale, min: 228, max: 292)
+        let hourlyIdealWidth = IslandLayout.clamp(304 * scale, min: 272, max: 332)
+        let dailyMinWidth = IslandLayout.clamp(154 * scale, min: 138, max: 174)
+        let dailyIdealWidth = IslandLayout.clamp(196 * scale, min: 176, max: 212)
+        let iconOrbSize = IslandLayout.clamp(82 * scale, min: 64, max: 84)
+        let currentTemperatureSize = IslandLayout.clamp(38 * scale, min: 28, max: 40)
+        let currentConditionSize = IslandLayout.clamp(14.5 * scale, min: 10.5, max: 15)
+        let currentMetaSize = IslandLayout.clamp(10.5 * scale, min: 8.8, max: 10.5)
+        let supportingTextSize = IslandLayout.clamp(8.4 * scale, min: 7.0, max: 8.4)
+        let headerTextSize = IslandLayout.clamp(8.8 * scale, min: 7.2, max: 8.8)
+        let hourlyIconSize = IslandLayout.clamp(20 * scale, min: 15, max: 20)
+        let hourlyTimeSize = IslandLayout.clamp(8.6 * scale, min: 7.2, max: 8.6)
+        let hourlyTemperatureSize = IslandLayout.clamp(15.5 * scale, min: 11.5, max: 15.5)
+        let dailyHeaderBottomSpacing = IslandLayout.clamp(cardHeight * 0.07, min: 5 * scale, max: 10 * scale)
+        let dayRowHeight = IslandLayout.clamp((cardHeight - 34 * scale) / 3, min: 24, max: 35)
+        let dayTextSize = IslandLayout.clamp(11.2 * scale, min: 9.2, max: 11.2)
+        let cardPaddingHorizontal = IslandLayout.clamp(13 * scale, min: 9, max: 13)
+        let cardPaddingVertical = IslandLayout.clamp(11.5 * scale, min: 8, max: 11.5)
+        let cardCornerRadius = IslandLayout.clamp(20 * scale, min: 14, max: 20)
+
+        return WeatherPanelMetrics(
+            scale: scale,
+            spacing: spacing,
+            cardHeight: cardHeight,
+            currentMinWidth: currentMinWidth,
+            currentIdealWidth: currentIdealWidth,
+            hourlyMinWidth: hourlyMinWidth,
+            hourlyIdealWidth: hourlyIdealWidth,
+            dailyMinWidth: dailyMinWidth,
+            dailyIdealWidth: dailyIdealWidth,
+            iconOrbSize: iconOrbSize,
+            currentTemperatureSize: currentTemperatureSize,
+            currentConditionSize: currentConditionSize,
+            currentMetaSize: currentMetaSize,
+            supportingTextSize: supportingTextSize,
+            headerTextSize: headerTextSize,
+            hourlyIconSize: hourlyIconSize,
+            hourlyTimeSize: hourlyTimeSize,
+            hourlyTemperatureSize: hourlyTemperatureSize,
+            dayRowHeight: dayRowHeight,
+            dayTextSize: dayTextSize,
+            dailyHeaderBottomSpacing: dailyHeaderBottomSpacing,
+            cardPaddingHorizontal: cardPaddingHorizontal,
+            cardPaddingVertical: cardPaddingVertical,
+            cardCornerRadius: cardCornerRadius
+        )
+    }
+
     private func expandedLayoutMetrics(for availableSize: CGSize) -> ExpandedLayoutMetrics {
         let scale = IslandLayout.clamp(
             min(availableSize.width / IslandLayout.expandedIdealWidth, availableSize.height / IslandLayout.expandedMinHeight),
@@ -2002,38 +2311,6 @@ struct IslandView: View {
             .padding(.vertical, 2)
     }
 
-    private func openICloudDrive() {
-        if let ubiquitousURL = FileManager.default.url(forUbiquityContainerIdentifier: nil)?
-            .deletingLastPathComponent() {
-            NSWorkspace.shared.open(ubiquitousURL)
-            return
-        }
-
-        let mobileDocumentsURL = FileManager.default.homeDirectoryForCurrentUser
-            .appending(path: "Library")
-            .appending(path: "Mobile Documents")
-        NSWorkspace.shared.open(mobileDocumentsURL)
-    }
-
-    private func createFolderInICloudDrive() {
-        let fileManager = FileManager.default
-        let baseURL = fileManager.url(forUbiquityContainerIdentifier: nil)?
-            .deletingLastPathComponent()
-            ?? fileManager.homeDirectoryForCurrentUser
-                .appending(path: "Library")
-                .appending(path: "Mobile Documents")
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let folderURL = baseURL.appending(path: "ohBangs-\(formatter.string(from: Date()))")
-
-        do {
-            try fileManager.createDirectory(at: folderURL, withIntermediateDirectories: true)
-            NSWorkspace.shared.activateFileViewerSelecting([folderURL])
-        } catch {
-            NSSound.beep()
-        }
-    }
-
     private static let calendarEntryDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -2088,7 +2365,7 @@ private struct IslandShortcutButtonStyle: ButtonStyle {
         let s = IslandStateStore()
         s.collapse()
         return s
-    }(), settings: AppSettingsStore())
+    }(), settings: AppSettingsStore(), weatherStore: WeatherStore())
     .padding(40)
     .background(
         LinearGradient(
@@ -2105,7 +2382,7 @@ private struct IslandShortcutButtonStyle: ButtonStyle {
         let s = IslandStateStore()
         s.expand()
         return s
-    }(), settings: AppSettingsStore(), initialSection: .status)
+    }(), settings: AppSettingsStore(), weatherStore: WeatherStore(), initialSection: .notification)
     .padding(40)
     .background(
         LinearGradient(

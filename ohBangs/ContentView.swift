@@ -3,11 +3,13 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var islandState: IslandStateStore
     @ObservedObject var settings: AppSettingsStore
+    @ObservedObject var weatherStore: WeatherStore
 
     var body: some View {
         IslandView(
             store: islandState,
-            settings: settings
+            settings: settings,
+            weatherStore: weatherStore
         )
     }
 }
@@ -15,6 +17,7 @@ struct ContentView: View {
 #Preview {
     ContentView(
         islandState: IslandStateStore(),
-        settings: AppSettingsStore()
+        settings: AppSettingsStore(),
+        weatherStore: WeatherStore()
     )
 }
