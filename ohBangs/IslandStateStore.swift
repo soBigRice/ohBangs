@@ -117,7 +117,7 @@ final class IslandStateStore: ObservableObject {
             try? await Task.sleep(for: self?.autoCollapseDuration ?? .seconds(4))
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                guard let self, !self.isPinnedExpanded else { return }
+                guard let self, !self.isPinnedExpanded, !self.isHovering else { return }
                 self.collapse()
             }
         }

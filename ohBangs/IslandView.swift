@@ -590,9 +590,10 @@ struct IslandView: View {
         GeometryReader { proxy in
             let metrics = statusMetrics(for: proxy.size)
             let availableHeight = max(0, proxy.size.height - metrics.verticalInset * 2)
+            let status = store.currentContent.systemStatus ?? unavailableSystemStatus
 
             HStack(alignment: .top, spacing: metrics.cardSpacing) {
-                statusPrimaryCard(scale: metrics.scale)
+                statusPrimaryCard(status.primary, scale: metrics.scale)
                     .frame(width: metrics.leftWidth, height: availableHeight)
 
                 VStack(alignment: .leading, spacing: IslandSpacing.xSmall * metrics.scale) {
@@ -619,53 +620,57 @@ struct IslandView: View {
 
                     HStack(spacing: metrics.cardSpacing) {
                         statusMetricCard(
-                            title: "CPU",
-                            value: "38%",
-                            detail: "2.8 GHz",
-                            footer: "",
+                            title: status.cpu.title,
+                            value: status.cpu.valueText,
+                            detail: status.cpu.detailText,
+                            footer: status.cpu.footerText,
                             accent: Color(red: 0.56, green: 0.42, blue: 1.0),
-                            progress: 0.38,
-                            chartPoints: [0.18, 0.36, 0.24, 0.58, 0.42, 0.21, 0.47, 0.32, 0.49, 0.29, 0.18],
+                            progress: status.cpu.progress,
+                            chartPoints: normalizedHistoryPoints(status.cpu.history),
                             footerEmphasis: nil,
+                            unit: nil,
                             scale: metrics.scale
                         )
                         .frame(width: metrics.metricWidth, height: metrics.metricCardHeight)
 
                         statusMetricCard(
-                            title: "内存",
-                            value: "62%",
-                            detail: "9.9 GB / 16 GB",
-                            footer: "",
+                            title: status.memory.title,
+                            value: status.memory.valueText,
+                            detail: status.memory.detailText,
+                            footer: status.memory.footerText,
                             accent: Color(red: 0.30, green: 0.56, blue: 1.0),
-                            progress: 0.62,
-                            chartPoints: [0.22, 0.27, 0.31, 0.25, 0.18, 0.21, 0.35, 0.29, 0.23, 0.26, 0.19],
+                            progress: status.memory.progress,
+                            chartPoints: normalizedHistoryPoints(status.memory.history),
                             footerEmphasis: nil,
+                            unit: nil,
                             scale: metrics.scale
                         )
                         .frame(width: metrics.metricWidth, height: metrics.metricCardHeight)
 
                         statusMetricCard(
-                            title: "存储空间",
-                            value: "35%",
-                            detail: "179 GB / 512 GB",
-                            footer: "179 GB / 512 GB",
+                            title: status.storage.title,
+                            value: status.storage.valueText,
+                            detail: status.storage.detailText,
+                            footer: status.storage.footerText,
                             accent: Color(red: 0.34, green: 0.82, blue: 0.74),
-                            progress: 0.35,
-                            chartPoints: [],
+                            progress: status.storage.progress,
+                            chartPoints: normalizedHistoryPoints(status.storage.history),
                             footerEmphasis: 0.65,
+                            unit: nil,
                             scale: metrics.scale
                         )
                         .frame(width: metrics.metricWidth, height: metrics.metricCardHeight)
 
                         statusMetricCard(
-                            title: "风扇",
-                            value: "1200",
-                            detail: "运行平稳",
-                            footer: "",
+                            title: status.thermal.title,
+                            value: status.thermal.valueText,
+                            detail: status.thermal.detailText,
+                            footer: status.thermal.footerText,
                             accent: Color(red: 0.55, green: 0.42, blue: 1.0),
-                            progress: 0.31,
-                            chartPoints: [],
+                            progress: status.thermal.progress,
+                            chartPoints: normalizedHistoryPoints(status.thermal.history),
                             footerEmphasis: nil,
+                            unit: nil,
                             scale: metrics.scale
                         )
                         .frame(width: metrics.metricWidth, height: metrics.metricCardHeight)
@@ -675,10 +680,10 @@ struct IslandView: View {
                 .frame(height: availableHeight, alignment: .top)
 
                 VStack(spacing: metrics.cardSpacing) {
-                    statusNetworkCard(scale: metrics.scale)
+                    statusNetworkCard(status.network, scale: metrics.scale)
                         .frame(height: metrics.rightCardHeight)
 
-                    statusBatteryCard(scale: metrics.scale)
+                    statusBatteryCard(status.battery, scale: metrics.scale)
                         .frame(height: metrics.rightCardHeight)
                 }
                 .frame(width: metrics.rightWidth, height: availableHeight, alignment: .top)
@@ -690,7 +695,7 @@ struct IslandView: View {
         .contentShape(Rectangle())
     }
 
-    private func statusPrimaryCard(scale: CGFloat) -> some View {
+    private func statusPrimaryCard(_ primary: IslandContent.SystemStatus.Primary, scale: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 5 * scale) {
             HStack(spacing: 7 * scale) {
                 ZStack {
@@ -713,13 +718,13 @@ struct IslandView: View {
                 .frame(width: 26 * scale, height: 26 * scale)
 
                 VStack(alignment: .leading, spacing: max(1, scale)) {
-                    Text("MacBook Pro")
+                    Text(primary.machineName)
                         .font(.system(size: 8.5 * scale, weight: .bold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
 
-                    Text(statusOperatingSystem)
+                    Text(primary.operatingSystem)
                         .font(.system(size: 6.8 * scale, weight: .medium))
                         .foregroundStyle(.white.opacity(0.60))
                         .lineLimit(1)
@@ -734,11 +739,11 @@ struct IslandView: View {
             }
 
             VStack(spacing: 0) {
-                statusInfoRow(symbol: "cpu", title: statusChipName, value: "\(ProcessInfo.processInfo.processorCount) 核心", scale: scale)
+                statusInfoRow(symbol: "cpu", title: primary.chipName, value: "\(ProcessInfo.processInfo.processorCount) 核心", scale: scale)
                 statusCardDivider
-                statusInfoRow(symbol: "memorychip", title: "内存", value: "16 GB", scale: scale)
+                statusInfoRow(symbol: "memorychip", title: "内存", value: primary.memoryCapacityText, scale: scale)
                 statusCardDivider
-                statusInfoRow(symbol: "internaldrive", title: "存储", value: "512 GB", scale: scale)
+                statusInfoRow(symbol: "internaldrive", title: "存储", value: primary.storageCapacityText, scale: scale)
             }
 
             Spacer(minLength: 0)
@@ -776,6 +781,7 @@ struct IslandView: View {
         progress: CGFloat,
         chartPoints: [CGFloat],
         footerEmphasis: CGFloat?,
+        unit: String?,
         scale: CGFloat
     ) -> some View {
         VStack(alignment: .leading, spacing: 7 * scale) {
@@ -794,7 +800,7 @@ struct IslandView: View {
             VStack(alignment: .leading, spacing: 5 * scale) {
                 statusRing(
                     value: value,
-                    unit: title == "风扇" ? "RPM" : nil,
+                    unit: unit,
                     progress: progress,
                     accent: accent,
                     scale: scale
@@ -858,20 +864,22 @@ struct IslandView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func statusNetworkCard(scale: CGFloat) -> some View {
+    private func statusNetworkCard(_ network: IslandContent.SystemStatus.Network, scale: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 6 * scale) {
             HStack(alignment: .center, spacing: 4 * scale) {
                 Image(systemName: "wifi")
                     .font(.system(size: 9.5 * scale, weight: .bold))
                     .foregroundStyle(Color(red: 0.55, green: 0.42, blue: 1.0))
 
-                Text("Wi-Fi")
+                Text(network.networkName)
                     .font(.system(size: 8.5 * scale, weight: .bold))
                     .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
 
                 Spacer(minLength: 2 * scale)
 
-                Text("5 GHz")
+                Text(network.bandText)
                     .font(.system(size: 6.8 * scale, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.56))
                     .lineLimit(1)
@@ -883,10 +891,8 @@ struct IslandView: View {
                     HStack(spacing: 3 * scale) {
                         Image(systemName: "arrow.up")
                             .font(.system(size: 6.5 * scale, weight: .bold))
-                        Text("32.6")
+                        Text(dataRateText(network.uploadRateBytesPerSecond))
                             .font(.system(size: 8.5 * scale, weight: .bold, design: .rounded))
-                        Text("MB/s")
-                            .font(.system(size: 6 * scale, weight: .bold))
                     }
                     .foregroundStyle(Color(red: 0.58, green: 0.44, blue: 1.0))
                     .lineLimit(1)
@@ -895,10 +901,8 @@ struct IslandView: View {
                     HStack(spacing: 3 * scale) {
                         Image(systemName: "arrow.down")
                             .font(.system(size: 6.5 * scale, weight: .bold))
-                        Text("12.4")
+                        Text(dataRateText(network.downloadRateBytesPerSecond))
                             .font(.system(size: 8.5 * scale, weight: .bold, design: .rounded))
-                        Text("MB/s")
-                            .font(.system(size: 6 * scale, weight: .bold))
                     }
                     .foregroundStyle(Color(red: 0.34, green: 0.88, blue: 0.72))
                     .lineLimit(1)
@@ -908,12 +912,12 @@ struct IslandView: View {
 
                 VStack(spacing: 4) {
                     statusWaveform(
-                        points: [0.34, 0.48, 0.30, 0.52, 0.40, 0.61, 0.28, 0.54, 0.36, 0.46],
+                        points: normalizedHistoryPoints(network.uploadHistory),
                         color: Color(red: 0.56, green: 0.42, blue: 1.0),
                         scale: scale
                     )
                     statusWaveform(
-                        points: [0.12, 0.18, 0.10, 0.19, 0.15, 0.23, 0.11, 0.18, 0.12, 0.16],
+                        points: normalizedHistoryPoints(network.downloadHistory),
                         color: Color(red: 0.34, green: 0.88, blue: 0.72),
                         scale: scale
                     )
@@ -927,10 +931,10 @@ struct IslandView: View {
         .background(statusCardBackground(cornerRadius: 14 * scale))
     }
 
-    private func statusBatteryCard(scale: CGFloat) -> some View {
+    private func statusBatteryCard(_ battery: IslandContent.SystemStatus.Battery, scale: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 6 * scale) {
             HStack(spacing: 4 * scale) {
-                Image(systemName: "battery.100")
+                Image(systemName: batterySymbolName(for: battery))
                     .font(.system(size: 9.5 * scale, weight: .bold))
                     .foregroundStyle(Color(red: 0.36, green: 0.84, blue: 0.58))
 
@@ -940,7 +944,7 @@ struct IslandView: View {
 
                 Spacer(minLength: 2 * scale)
 
-                Text("87%")
+                Text(battery.levelText)
                     .font(.system(size: 9 * scale, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.88))
                     .lineLimit(1)
@@ -963,13 +967,13 @@ struct IslandView: View {
                                 endPoint: .trailing
                             )
                         )
-                        .frame(width: proxy.size.width * 0.87)
+                        .frame(width: proxy.size.width * CGFloat((battery.levelPercent ?? 0) / 100))
                 }
             }
             .frame(height: 8 * scale)
 
             HStack(spacing: 4 * scale) {
-                Text("剩余")
+                Text(battery.statusText)
                     .font(.system(size: 6.8 * scale, weight: .medium))
                     .foregroundStyle(.white.opacity(0.42))
                     .lineLimit(1)
@@ -977,7 +981,7 @@ struct IslandView: View {
 
                 Spacer(minLength: 2 * scale)
 
-                Text("4 小时 32 分")
+                Text(battery.timeRemainingText)
                     .font(.system(size: 7.2 * scale, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.72))
                     .lineLimit(1)
@@ -1045,15 +1049,6 @@ struct IslandView: View {
             }
         }
         .frame(height: 11 * scale)
-    }
-
-    private var statusOperatingSystem: String {
-        let version = ProcessInfo.processInfo.operatingSystemVersion
-        return "macOS \(version.majorVersion).\(version.minorVersion)"
-    }
-
-    private var statusChipName: String {
-        ProcessInfo.processInfo.isiOSAppOnMac ? "Apple Silicon" : "Apple M 系列"
     }
 
     private func statusRing(
@@ -1140,6 +1135,60 @@ struct IslandView: View {
                             )
                     )
             }
+    }
+
+    private var unavailableSystemStatus: IslandContent.SystemStatus {
+        .init(
+            primary: .init(
+                machineName: Host.current().localizedName ?? "Mac",
+                operatingSystem: "正在读取系统状态",
+                chipName: "等待系统数据",
+                memoryCapacityText: "--",
+                storageCapacityText: "--"
+            ),
+            cpu: .init(title: "CPU", valueText: "--", detailText: "等待数据", footerText: "", progress: 0, history: []),
+            memory: .init(title: "内存", valueText: "--", detailText: "等待数据", footerText: "", progress: 0, history: []),
+            storage: .init(title: "存储空间", valueText: "--", detailText: "等待数据", footerText: "", progress: 0, history: []),
+            thermal: .init(title: "热压", valueText: "--", detailText: "等待数据", footerText: "", progress: 0, history: []),
+            network: .init(networkName: "未读取", bandText: "--", uploadRateBytesPerSecond: 0, downloadRateBytesPerSecond: 0, uploadHistory: [], downloadHistory: []),
+            battery: .init(levelPercent: nil, levelText: "--", statusText: "等待数据", timeRemainingText: "--", isCharging: false)
+        )
+    }
+
+    private func normalizedHistoryPoints(_ history: [Double]) -> [CGFloat] {
+        let sanitized = history.map { max($0, 0) }
+        guard let maxValue = sanitized.max(), maxValue > 0 else {
+            return sanitized.map { _ in 0.12 }
+        }
+        return sanitized.map { CGFloat($0 / maxValue) }
+    }
+
+    private func dataRateText(_ bytesPerSecond: Double) -> String {
+        if bytesPerSecond >= 1_000_000 {
+            return String(format: "%.2f MB/s", bytesPerSecond / 1_000_000)
+        } else if bytesPerSecond >= 1_000 {
+            return String(format: "%.2f KB/s", bytesPerSecond / 1_000)
+        } else {
+            return String(format: "%.2f B/s", bytesPerSecond)
+        }
+    }
+
+    private func batterySymbolName(for battery: IslandContent.SystemStatus.Battery) -> String {
+        if battery.isCharging {
+            return "battery.100.bolt"
+        }
+
+        guard let level = battery.levelPercent else { return "powerplug" }
+        switch level {
+        case ..<20:
+            return "battery.25"
+        case ..<50:
+            return "battery.50"
+        case ..<80:
+            return "battery.75"
+        default:
+            return "battery.100"
+        }
     }
 
     private var notificationPanel: some View {
@@ -1603,11 +1652,15 @@ struct IslandView: View {
                 .buttonStyle(IslandShortcutButtonStyle())
             }
 
-            VStack(spacing: IslandSpacing.xSmall + 1) {
-                ForEach(displayedAgendaEntries) { entry in
-                    agendaEventCard(entry, metrics: metrics)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: IslandSpacing.xSmall + 1) {
+                    ForEach(displayedAgendaEntries) { entry in
+                        agendaEventCard(entry, metrics: metrics)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .padding(.leading, IslandSpacing.medium + 1)
         .padding(.top, IslandSpacing.xxSmall)
@@ -1637,13 +1690,16 @@ struct IslandView: View {
                     Text(detail.title)
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(.white)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Text(calendarMetaText(for: entry))
                         .font(.system(size: 8, weight: .medium))
                         .foregroundStyle(.white.opacity(0.48))
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer(minLength: IslandSpacing.small)
 
@@ -1695,12 +1751,11 @@ struct IslandView: View {
 
     private var agendaEntries: [IslandContent.CalendarDayEntry] {
         let events = calendarEntries.filter(\.hasEvents)
-        return events.isEmpty ? Array(calendarEntries.prefix(3)) : Array(events.prefix(3))
+        return events.isEmpty ? Array(calendarEntries.prefix(1)) : events
     }
 
     private var displayedAgendaEntries: [IslandContent.CalendarDayEntry] {
-        let hasRealEvents = agendaEntries.contains(where: \.hasEvents)
-        return Array(agendaEntries.prefix(hasRealEvents ? 2 : 1))
+        agendaEntries
     }
 
     private func statusMetrics(for availableSize: CGSize) -> StatusMetrics {
@@ -1748,7 +1803,7 @@ struct IslandView: View {
             pillHeight: IslandLayout.clamp(18 * scale, min: 16, max: 20),
             navButtonSize: IslandLayout.clamp(18 * scale, min: 18, max: 22),
             featuredCardMinHeight: IslandLayout.clamp(50 * scale, min: 46, max: 58),
-            agendaCardMinHeight: IslandLayout.clamp(42 * scale, min: 38, max: 50),
+            agendaCardMinHeight: IslandLayout.clamp(56 * scale, min: 52, max: 68),
             calendarCellSize: IslandLayout.clamp(monthWidth / 12, min: 14, max: 17),
             dotSize: IslandLayout.clamp(1.5 * scale, min: 1.5, max: 2.2),
             badgeHeight: IslandLayout.clamp(18 * scale, min: 16, max: 20)

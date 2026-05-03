@@ -1,6 +1,50 @@
 import Foundation
 
 struct IslandContent: Sendable {
+    struct SystemStatus: Sendable {
+        struct Primary: Sendable {
+            let machineName: String
+            let operatingSystem: String
+            let chipName: String
+            let memoryCapacityText: String
+            let storageCapacityText: String
+        }
+
+        struct Metric: Sendable {
+            let title: String
+            let valueText: String
+            let detailText: String
+            let footerText: String
+            let progress: Double
+            let history: [Double]
+        }
+
+        struct Network: Sendable {
+            let networkName: String
+            let bandText: String
+            let uploadRateBytesPerSecond: Double
+            let downloadRateBytesPerSecond: Double
+            let uploadHistory: [Double]
+            let downloadHistory: [Double]
+        }
+
+        struct Battery: Sendable {
+            let levelPercent: Double?
+            let levelText: String
+            let statusText: String
+            let timeRemainingText: String
+            let isCharging: Bool
+        }
+
+        let primary: Primary
+        let cpu: Metric
+        let memory: Metric
+        let storage: Metric
+        let thermal: Metric
+        let network: Network
+        let battery: Battery
+    }
+
     struct CalendarEventDetail: Sendable {
         let title: String
         let timeText: String
@@ -43,6 +87,25 @@ struct IslandContent: Sendable {
     let isLive: Bool
     let calendarSummary: CalendarSummary?
     let calendarOverview: CalendarOverview?
+    let systemStatus: SystemStatus?
+
+    init(
+        appName: String,
+        title: String,
+        subtitle: String,
+        isLive: Bool,
+        calendarSummary: CalendarSummary?,
+        calendarOverview: CalendarOverview?,
+        systemStatus: SystemStatus? = nil
+    ) {
+        self.appName = appName
+        self.title = title
+        self.subtitle = subtitle
+        self.isLive = isLive
+        self.calendarSummary = calendarSummary
+        self.calendarOverview = calendarOverview
+        self.systemStatus = systemStatus
+    }
 }
 
 protocol IslandContentProvider: AnyObject {
