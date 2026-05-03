@@ -60,6 +60,7 @@ final class WeatherStore: NSObject, ObservableObject {
     @Published private(set) var snapshot: WeatherSnapshot?
     @Published private(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published private(set) var errorMessage: String?
+    @Published private(set) var isLoading = false
 
     private let locationManager = CLLocationManager()
     private let weatherClient = OpenMeteoWeatherClient()
@@ -93,6 +94,10 @@ final class WeatherStore: NSObject, ObservableObject {
         if let latestCoordinate {
             fetchWeather(for: latestCoordinate)
         } else {
+            if let currentLocation = locationManager.location?.coordinate {
+                fetchWeather(for: currentLocation)
+                return
+            }
             requestAuthorizationIfNeeded()
         }
     }
@@ -103,14 +108,20 @@ final class WeatherStore: NSObject, ObservableObject {
         switch authorizationStatus {
         case .authorizedAlways, .authorizedWhenInUse:
             errorMessage = nil
+            isLoading = true
             locationManager.requestLocation()
         case .notDetermined:
+            isLoading = false
+            errorMessage = "等待定位权限"
             locationManager.requestWhenInUseAuthorization()
         case .denied:
+            isLoading = false
             errorMessage = "未开启定位权限"
         case .restricted:
+            isLoading = false
             errorMessage = "定位权限受限"
         @unknown default:
+            isLoading = false
             errorMessage = "定位状态未知"
         }
     }
@@ -129,6 +140,7 @@ final class WeatherStore: NSObject, ObservableObject {
     private func fetchWeather(for coordinate: CLLocationCoordinate2D) {
         latestCoordinate = coordinate
         fetchTask?.cancel()
+        isLoading = true
 
         fetchTask = Task { [weak self] in
             guard let self else { return }
@@ -149,11 +161,13 @@ final class WeatherStore: NSObject, ObservableObject {
 
                 self.snapshot = snapshot
                 self.errorMessage = nil
+                self.isLoading = false
             } catch {
                 if self.snapshot == nil {
                     self.snapshot = .placeholder
                 }
                 self.errorMessage = "天气更新失败"
+                self.isLoading = false
             }
         }
     }
@@ -346,6 +360,7 @@ extension WeatherStore: CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         Task { @MainActor [weak self] in
+            self?.isLoading = false
             self?.errorMessage = "定位失败"
         }
     }

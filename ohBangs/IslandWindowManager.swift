@@ -150,7 +150,7 @@ final class IslandWindowManager: NSObject, NSWindowDelegate {
         panel.maxSize = NSSize(width: IslandLayout.settingsPanelMaxWidth, height: 520)
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
-        panel.contentView = NSHostingView(rootView: SettingsPanelView(settings: settingsStore))
+        panel.contentView = NSHostingView(rootView: SettingsPanelView(settings: settingsStore, weatherStore: weatherStore))
 
         return panel
     }

@@ -201,6 +201,34 @@ struct IslandView: View {
         let cardInnerSpacing: CGFloat
     }
 
+    private struct AppShortcut: Identifiable {
+        let id: String
+        let title: String
+        let symbolName: String
+        let bundleIdentifier: String?
+        let appPath: String?
+        let tint: Color
+    }
+
+    private struct ShortcutPanelMetrics {
+        let columnCount: Int
+        let gridSpacing: CGFloat
+        let sectionSpacing: CGFloat
+        let headerBottomSpacing: CGFloat
+        let headerHeight: CGFloat
+        let cardHeight: CGFloat
+        let cardContentSpacing: CGFloat
+        let iconContainerSize: CGFloat
+        let iconSize: CGFloat
+        let titleSize: CGFloat
+        let cardCornerRadius: CGFloat
+        let dockHeight: CGFloat
+        let dockHorizontalPadding: CGFloat
+        let dockIconSize: CGFloat
+        let activeDockWidth: CGFloat
+        let activeDockHeight: CGFloat
+    }
+
     private struct WeatherPanelMetrics {
         let scale: CGFloat
         let spacing: CGFloat
@@ -268,11 +296,79 @@ struct IslandView: View {
     @State private var selectedCalendarEntryID: String?
     @State private var hoveredEntryID: String?
     @State private var hoveringCalendar: Bool = false
+    @State private var hoveredShortcutID: String?
 
     private static let islandSpring: Animation =
         .spring(response: 0.45, dampingFraction: 0.78, blendDuration: 0)
     private static let sectionSwitchAnimation: Animation =
         .spring(response: 0.34, dampingFraction: 0.86, blendDuration: 0.08)
+
+    private static let availableAppShortcuts: [AppShortcut] = [
+        AppShortcut(
+            id: "calendar",
+            title: "日历",
+            symbolName: "calendar",
+            bundleIdentifier: "com.apple.iCal",
+            appPath: nil,
+            tint: Color(red: 1.0, green: 0.36, blue: 0.32)
+        ),
+        AppShortcut(
+            id: "files",
+            title: "文件",
+            symbolName: "folder.fill",
+            bundleIdentifier: "com.apple.finder",
+            appPath: nil,
+            tint: Color(red: 0.32, green: 0.70, blue: 1.0)
+        ),
+        AppShortcut(
+            id: "music",
+            title: "音乐",
+            symbolName: "music.note",
+            bundleIdentifier: "com.apple.Music",
+            appPath: nil,
+            tint: Color(red: 1.0, green: 0.27, blue: 0.38)
+        ),
+        AppShortcut(
+            id: "notes",
+            title: "便签",
+            symbolName: "note.text",
+            bundleIdentifier: "com.apple.Notes",
+            appPath: nil,
+            tint: Color(red: 1.0, green: 0.80, blue: 0.23)
+        ),
+        AppShortcut(
+            id: "weather",
+            title: "天气",
+            symbolName: "cloud.sun.fill",
+            bundleIdentifier: "com.apple.weather",
+            appPath: nil,
+            tint: Color(red: 0.39, green: 0.67, blue: 1.0)
+        ),
+        AppShortcut(
+            id: "safari",
+            title: "浏览器",
+            symbolName: "safari.fill",
+            bundleIdentifier: "com.apple.Safari",
+            appPath: nil,
+            tint: Color(red: 0.35, green: 0.73, blue: 1.0)
+        ),
+        AppShortcut(
+            id: "terminal",
+            title: "终端",
+            symbolName: "terminal",
+            bundleIdentifier: "com.apple.Terminal",
+            appPath: nil,
+            tint: Color.white.opacity(0.86)
+        ),
+        AppShortcut(
+            id: "settings",
+            title: "设置",
+            symbolName: "gearshape.fill",
+            bundleIdentifier: "com.apple.systempreferences",
+            appPath: nil,
+            tint: Color.white.opacity(0.72)
+        )
+    ]
 
     private let expandedSectionBarHeight: CGFloat = 34
 
@@ -306,6 +402,27 @@ struct IslandView: View {
         case .collapsed: return 12
         case .hint: return 16
         case .expanded: return 22
+        }
+    }
+
+    private var appShortcuts: [AppShortcut] {
+        let builtInShortcuts = Dictionary(uniqueKeysWithValues: Self.availableAppShortcuts.map { ($0.id, $0) })
+        let customShortcuts = Dictionary(uniqueKeysWithValues: settings.customShortcutOptions.map { option in
+            (
+                option.id,
+                AppShortcut(
+                    id: option.id,
+                    title: option.title,
+                    symbolName: option.symbolName,
+                    bundleIdentifier: option.bundleIdentifier,
+                    appPath: option.appPath,
+                    tint: Color.white.opacity(0.82)
+                )
+            )
+        })
+
+        return settings.pinnedShortcutIDs.compactMap { id in
+            builtInShortcuts[id] ?? customShortcuts[id]
         }
     }
 
@@ -450,6 +567,15 @@ struct IslandView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .frame(width: islandSize.width, height: islandSize.height, alignment: .top)
             .background(Color.black)
+            .overlay(alignment: .topLeading) {
+                if selectedSection == .overview {
+                    overviewFloatingHeader
+                        .padding(.leading, layout.horizontalPadding + layout.contentHorizontalPadding)
+                        .padding(.trailing, layout.horizontalPadding + layout.contentHorizontalPadding)
+                        .padding(.top, 6)
+                        .allowsHitTesting(false)
+                }
+            }
     }
 
     private var expandedMainContent: some View {
@@ -1180,10 +1306,12 @@ struct IslandView: View {
                             .frame(minWidth: metrics.dailyMinWidth, idealWidth: metrics.dailyIdealWidth, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             .layoutPriority(3)
                     }
+                } else if weatherStore.isLoading {
+                    weatherLoadingPanel(metrics: metrics)
                 } else if let errorMessage = weatherStore.errorMessage {
                     weatherUnavailablePanel(message: errorMessage, metrics: metrics)
                 } else {
-                    weatherLoadingPanel(metrics: metrics)
+                    weatherUnavailablePanel(message: "请允许定位或点按重试", metrics: metrics)
                 }
             }
             .frame(height: metrics.cardHeight, alignment: .top)
@@ -1282,16 +1410,53 @@ struct IslandView: View {
     }
 
     private var overviewPanel: some View {
-        HStack(spacing: 12) {
-            overviewMetric(title: "来源", value: store.currentContent.appName, emphasis: false)
-            overviewMetric(title: "模式", value: store.currentContent.isLive ? "实时" : "静态", emphasis: true)
-            overviewMetric(title: "已展开", value: "\(calendarEntries.count) 天", emphasis: false)
+        GeometryReader { proxy in
+            let metrics = shortcutPanelMetrics(for: proxy.size)
+
+            VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
+                ScrollView(.vertical, showsIndicators: false) {
+                    if appShortcuts.isEmpty {
+                        emptyShortcutState
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 20)
+                    } else {
+                        LazyVGrid(
+                            columns: Array(
+                                repeating: GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: metrics.gridSpacing),
+                                count: metrics.columnCount
+                            ),
+                            spacing: metrics.gridSpacing
+                        ) {
+                            ForEach(appShortcuts) { shortcut in
+                                shortcutCard(shortcut, metrics: metrics)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var overviewFloatingHeader: some View {
+        HStack(alignment: .top) {
+            Text("快捷应用")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .fixedSize()
+
+            Spacer(minLength: 12)
+
+            Text("已固定 \(appShortcuts.count) 个")
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.52))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var embeddedSettingsPanel: some View {
-        SettingsPanelView(settings: settings, mode: .embedded)
+        SettingsPanelView(settings: settings, weatherStore: weatherStore, mode: .embedded)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
@@ -1549,26 +1714,178 @@ struct IslandView: View {
         )
     }
 
-    private func overviewMetric(title: String, value: String, emphasis: Bool) -> some View {
-        let layout = expandedLayoutMetrics(for: IslandLayout.expandedIslandSize(in: IslandLayout.panelSize(for: NSScreen.main)))
+    private func shortcutCard(_ shortcut: AppShortcut, metrics: ShortcutPanelMetrics) -> some View {
+        let isHovered = hoveredShortcutID == shortcut.id
+        let isHighlighted = isHovered
 
-        return VStack(alignment: .leading, spacing: IslandSpacing.medium) {
-            Text(title.uppercased())
-                .font(.system(size: IslandTypography.caption, weight: .medium))
-                .foregroundStyle(.white.opacity(0.45))
+        return Button {
+            openAppShortcut(shortcut)
+        } label: {
+            VStack(spacing: metrics.cardContentSpacing) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    shortcut.tint.opacity(isHighlighted ? 0.24 : 0.16),
+                                    Color.white.opacity(isHighlighted ? 0.08 : 0.04)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: metrics.iconContainerSize, height: metrics.iconContainerSize)
 
-            Text(value)
-                .font(.system(size: emphasis ? IslandTypography.metric : IslandTypography.title, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .lineLimit(1)
+                    shortcutIcon(shortcut, metrics: metrics)
+                }
 
-            Text("通过底部按钮切换容器内容")
-                .font(.system(size: IslandTypography.eyebrow, weight: .medium))
-                .foregroundStyle(.white.opacity(0.62))
-                .lineLimit(2)
+                Text(shortcut.title)
+                    .font(.system(size: metrics.titleSize, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: metrics.cardHeight)
+            .background(
+                RoundedRectangle(cornerRadius: metrics.cardCornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(isHighlighted ? 0.085 : 0.045),
+                                Color.white.opacity(isHighlighted ? 0.03 : 0.015)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: metrics.cardCornerRadius, style: .continuous)
+                    .stroke(
+                        isHighlighted
+                            ? Color(red: 0.43, green: 0.31, blue: 1.0).opacity(0.95)
+                            : Color.white.opacity(0.05),
+                        lineWidth: isHighlighted ? 1.4 : 0.8
+                    )
+            )
+            .shadow(
+                color: isHighlighted
+                    ? Color(red: 0.38, green: 0.28, blue: 1.0).opacity(0.26)
+                    : .clear,
+                radius: 16,
+                y: 6
+            )
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(layout.cardPadding)
+        .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(cornerRadius: metrics.cardCornerRadius, style: .continuous))
+        .onHover { isHovering in
+            hoveredShortcutID = isHovering ? shortcut.id : nil
+        }
+    }
+
+    private var emptyShortcutState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(.white.opacity(0.68))
+
+            Text("还没有固定快捷方式")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.82))
+
+            Text("在设置页勾选要展示的应用")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.white.opacity(0.44))
+        }
+    }
+
+    private func shortcutPanelMetrics(for size: CGSize) -> ShortcutPanelMetrics {
+        let columnCount = size.width < 520 ? 3 : 4
+        let rowCount = ceil(Double(appShortcuts.count) / Double(columnCount))
+        let compactHeight = size.height < 186
+        let gridSpacing: CGFloat = compactHeight ? 7 : 10
+        let sectionSpacing: CGFloat = compactHeight ? 7 : 10
+        let headerBottomSpacing: CGFloat = compactHeight ? 0 : 2
+        let headerHeight: CGFloat = compactHeight ? 16 : 18
+        let totalGridSpacing = gridSpacing * CGFloat(max(rowCount - 1, 0))
+        let reservedHeight = headerHeight + headerBottomSpacing + sectionSpacing
+        let availableGridHeight = max(88, size.height - reservedHeight)
+        let cardHeight = min(90, max(40, floor((availableGridHeight - totalGridSpacing) / CGFloat(max(rowCount, 1)))))
+        let compactCard = cardHeight < 60
+
+        return ShortcutPanelMetrics(
+            columnCount: columnCount,
+            gridSpacing: gridSpacing,
+            sectionSpacing: sectionSpacing,
+            headerBottomSpacing: headerBottomSpacing,
+            headerHeight: headerHeight,
+            cardHeight: cardHeight,
+            cardContentSpacing: compactCard ? 5 : 8,
+            iconContainerSize: compactCard ? 28 : 40,
+            iconSize: compactCard ? 15 : 21,
+            titleSize: compactCard ? 9 : 10,
+            cardCornerRadius: compactCard ? 16 : 22,
+            dockHeight: 0,
+            dockHorizontalPadding: 0,
+            dockIconSize: 0,
+            activeDockWidth: 0,
+            activeDockHeight: 0
+        )
+    }
+
+    @ViewBuilder
+    private func shortcutIcon(_ shortcut: AppShortcut, metrics: ShortcutPanelMetrics) -> some View {
+        if let appIcon = appIconImage(for: shortcut, iconSize: metrics.iconContainerSize * 0.86) {
+            Image(nsImage: appIcon)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: metrics.iconContainerSize * 0.86, height: metrics.iconContainerSize * 0.86)
+                .clipShape(RoundedRectangle(cornerRadius: metrics.iconContainerSize * 0.22, style: .continuous))
+        } else {
+            Image(systemName: shortcut.symbolName)
+                .font(.system(size: metrics.iconSize, weight: .medium))
+                .foregroundStyle(shortcut.tint)
+        }
+    }
+
+    private func appIconImage(for shortcut: AppShortcut, iconSize: CGFloat) -> NSImage? {
+        let appURL: URL?
+        if let appPath = shortcut.appPath {
+            appURL = URL(fileURLWithPath: appPath)
+        } else if let bundleIdentifier = shortcut.bundleIdentifier {
+            appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
+        } else {
+            appURL = nil
+        }
+
+        guard let appURL else {
+            return nil
+        }
+
+        let icon = NSWorkspace.shared.icon(forFile: appURL.path)
+        icon.size = NSSize(width: iconSize, height: iconSize)
+        return icon
+    }
+
+    private func openAppShortcut(_ shortcut: AppShortcut) {
+        let appURL: URL?
+        if let appPath = shortcut.appPath {
+            appURL = URL(fileURLWithPath: appPath)
+        } else if let bundleIdentifier = shortcut.bundleIdentifier {
+            appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
+        } else {
+            appURL = nil
+        }
+
+        guard let appURL else {
+            return
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, _ in }
     }
 
     private var calendarBlock: some View {
