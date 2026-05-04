@@ -390,7 +390,6 @@
 		8B15BE7B2F9F323E00249A0E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ohBangs/ohBangs.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -400,10 +399,11 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleIconFile = AppIcon.icns;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "ohBangs 需要读取你的系统日历，在灵动岛中展示今天与下一条安排。";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "ohBangs 需要读取你的系统日历，在灵动岛中展示今天与下一条安排。";
-				INFOPLIST_KEY_NSLocationUsageDescription = "ohBangs 需要访问你的当前位置，用于在灵动岛中展示实时天气。";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocationUsageDescription = "ohBangs 需要访问你的当前位置，用于在灵动岛中展示实时天气。";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -424,7 +424,6 @@
 		8B15BE7C2F9F323E00249A0E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ohBangs/ohBangs.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -434,10 +433,11 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleIconFile = AppIcon.icns;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "ohBangs 需要读取你的系统日历，在灵动岛中展示今天与下一条安排。";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "ohBangs 需要读取你的系统日历，在灵动岛中展示今天与下一条安排。";
-				INFOPLIST_KEY_NSLocationUsageDescription = "ohBangs 需要访问你的当前位置，用于在灵动岛中展示实时天气。";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocationUsageDescription = "ohBangs 需要访问你的当前位置，用于在灵动岛中展示实时天气。";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

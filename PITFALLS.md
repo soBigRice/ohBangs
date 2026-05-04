@@ -73,3 +73,33 @@ ZStack(alignment: .top) {
 - **看不见 ≠ 不挡事件**。SwiftUI 中 `Color.clear` 默认是 hit-testable 的，要么 `.allowsHitTesting(false)`，要么干脆别放。
 - NSPanel + NSHostingView 的事件透传链：`NSWindow → contentView(NSHostingView).hitTest → SwiftUI hit test`。任一环节返回非 nil，事件就被这个 panel 截胡，下层窗口收不到。所以"看不见的热区"问题，**必须把 SwiftUI 这一层的命中区域和视觉区域严格对齐**——`.contentShape` 只对它所在的子树生效，外层兄弟视图（如背景 Color）要单独处理。
 - 决定用"固定大 panel + SwiftUI 内层动画缩放"这种架构（理由见 Pitfall #1：尺寸权威只能有一个），就要承担一个隐形责任：**panel 内任何 hit-testable 的视图，其形状必须和当前可见 island 形状一致**，否则就会出现"看不见但挡事件"的鬼区。
+
+---
+
+## 3. macOS App 图标：只看 asset catalog 编译成功不够
+
+### 现象
+`Assets.xcassets/AppIcon.appiconset` 里有图标 PNG，`xcodebuild` 也能生成 `AppIcon.icns`，但实际从 Xcode/DerivedData 启动后 Dock/Finder 仍可能显示通用白图标。
+
+### 根因
+这次同时踩了两个点：
+
+1. 只验证了临时 `.derivedData` 构建产物，没有确认 Xcode 默认 DerivedData 里实际启动的 `.app`。
+2. 仅依赖 asset catalog 自动生成的 `AppIcon.icns` 时，产物里的 `.icns` 不完整，`iconutil` 解包只看到部分尺寸；同时生成脚本里的渐变描边实现用了 `addClip()` 直接裁整块圆角矩形，导致胶囊边框被画成大面积浅色填充。
+
+### 修法
+图标链路要按 macOS 真实加载路径验证：
+
+- 用 `iconutil -c icns` 从完整 10 尺寸 `.iconset` 生成 `ohBangs/AppIcon.icns`。
+- 在 target build settings 里明确设置 `INFOPLIST_KEY_CFBundleIconFile = AppIcon.icns`，并移除 `ASSETCATALOG_COMPILER_APPICON_NAME`，避免 asset catalog 自动产物覆盖手工 `.icns`。
+- 构建默认 DerivedData 后检查：
+  - `Contents/Info.plist` 的 `CFBundleIconFile`
+  - `Contents/Resources/AppIcon.icns` 文件大小和 SHA
+  - `iconutil -c iconset` 是否能解出 10 个标准尺寸
+  - `NSWorkspace.shared.icon(forFile:)` 导出的图标是否是自定义图
+- 最后重注册 bundle 并刷新缓存：`lsregister -f -R -trusted <app>`、`qlmanage -r cache`、必要时重启 Dock。
+
+### 教训
+- App 图标问题不能只看 Xcode 构建成功；必须验证系统 API 实际取到的图标。
+- macOS Dock/Finder 会缓存 bundle 图标。图标文件已经变了，不代表当前运行进程或 Dock 立刻刷新。
+- 画渐变描边时不能把整块圆角矩形 `addClip()` 后直接绘制渐变；要构造外圆角与内圆角的环形区域，只裁剪描边区域。
