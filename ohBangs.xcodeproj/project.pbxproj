@@ -29,9 +29,22 @@
 		8B15BE702F9F323E00249A0E /* ohBangsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ohBangsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		9082F018C3C34266A589F7B2 /* Exceptions for "ohBangs" folder in "ohBangs" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 8B15BE582F9F323C00249A0E /* ohBangs */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		8B15BE5B2F9F323C00249A0E /* ohBangs */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				9082F018C3C34266A589F7B2 /* Exceptions for "ohBangs" folder in "ohBangs" target */,
+			);
 			path = ohBangs;
 			sourceTree = "<group>";
 		};
@@ -398,12 +411,8 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleIconFile = AppIcon.icns;
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "ohBangs 需要读取你的系统日历，在灵动岛中展示今天与下一条安排。";
-				INFOPLIST_KEY_NSCalendarsUsageDescription = "ohBangs 需要读取你的系统日历，在灵动岛中展示今天与下一条安排。";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSLocationUsageDescription = "ohBangs 需要访问你的当前位置，用于在灵动岛中展示实时天气。";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ohBangs/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -432,12 +441,8 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleIconFile = AppIcon.icns;
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "ohBangs 需要读取你的系统日历，在灵动岛中展示今天与下一条安排。";
-				INFOPLIST_KEY_NSCalendarsUsageDescription = "ohBangs 需要读取你的系统日历，在灵动岛中展示今天与下一条安排。";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSLocationUsageDescription = "ohBangs 需要访问你的当前位置，用于在灵动岛中展示实时天气。";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ohBangs/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

@@ -1,6 +1,6 @@
 import AppKit
 
-let outputDirectory = URL(fileURLWithPath: "ohBangs/Assets.xcassets/AppIcon.appiconset", isDirectory: true)
+let outputDirectory = URL(fileURLWithPath: "tools/AppIcon.iconset", isDirectory: true)
 let appIconURL = URL(fileURLWithPath: "ohBangs/AppIcon.icns")
 let canvasSize = CGSize(width: 1024, height: 1024)
 
